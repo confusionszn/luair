@@ -486,4 +486,27 @@ mod tests {
         assert!(!info.target_triple.is_empty());
         assert!(info.packaging_targets.len() >= 6);
     }
+
+    #[test]
+    fn webview2_windows_share_identical_browser_args() {
+        let raw = include_str!("../tauri.conf.json");
+        let parsed: serde_json::Value = serde_json::from_str(raw).expect("valid tauri.conf.json");
+        let windows = parsed["app"]["windows"]
+            .as_array()
+            .expect("app.windows array");
+        assert!(windows.len() >= 2);
+
+        let shared_windows: Vec<_> = windows
+            .iter()
+            .filter(|w| w.get("dataDirectory").is_none())
+            .collect();
+        let expected_args = shared_windows[0].get("additionalBrowserArgs").cloned();
+        for win in shared_windows {
+            assert_eq!(
+                win.get("additionalBrowserArgs").cloned(),
+                expected_args,
+                "WebView2 requires matching additionalBrowserArgs for all windows sharing EBWebView"
+            );
+        }
+    }
 }

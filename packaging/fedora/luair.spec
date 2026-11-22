@@ -1,5 +1,5 @@
 Name:           luair
-Version:        2.0.0
+Version:        2.0.1
 Release:        1%{?dist}
 Summary:        Independent desktop crosshair overlay powered by Rust and Tauri v2
 
@@ -56,5 +56,8 @@ install -Dm0644 public/luair-icon.svg \
 %{_datadir}/icons/hicolor/scalable/apps/com.luair.overlay.svg
 
 %changelog
+* Sun Nov 22 2026 Luair Contributors <maintainers@luair.app> - 2.0.1-1
+- Align WebView2 additionalBrowserArgs across overlay and menu windows
+
 * Sun Nov 22 2026 Luair Contributors <maintainers@luair.app> - 2.0.0-1
 - Initial Tauri v2 + Rust cross-platform release with in-app GitHub Releases updater
