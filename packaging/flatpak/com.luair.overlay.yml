@@ -1,0 +1,38 @@
+app-id: com.luair.overlay
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node22
+command: luair
+finish-args:
+  # Support both native Wayland and XWayland / X11 global hotkey capture
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --share=network
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --env=WEBKIT_DISABLE_DMABUF_RENDERER=1
+modules:
+  - name: luair
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node22/bin
+      env:
+        CARGO_HOME: /run/build/luair/.cargo
+        npm_config_offline: 'false'
+    build-commands:
+      - corepack enable || true
+      - pnpm install --frozen-lockfile || npm install
+      - pnpm run build || npm run build
+      - cargo build --manifest-path src-tauri/Cargo.toml --release --offline || cargo build --manifest-path src-tauri/Cargo.toml --release
+      - install -Dm755 src-tauri/target/release/luair /app/bin/luair
+      - install -Dm644 packaging/linux/com.luair.overlay.desktop /app/share/applications/com.luair.overlay.desktop
+      - install -Dm644 packaging/flatpak/com.luair.overlay.metainfo.xml /app/share/metainfo/com.luair.overlay.metainfo.xml
+      - install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/com.luair.overlay.png
+      - install -Dm644 public/luair-icon.svg /app/share/icons/hicolor/scalable/apps/com.luair.overlay.svg
+    sources:
+      - type: dir
+        path: ../..

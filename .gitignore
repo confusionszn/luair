@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build & bundler outputs
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Temporary, log, and signing key files
+*.local
+*.log
+*.tmp
+*.bak
+*.key
+.DS_Store
+Thumbs.db

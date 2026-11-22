@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Luair
+Comment=Independent high-performance desktop crosshair overlay
+Exec=luair
+Icon=com.luair.overlay
+Terminal=false
+Type=Application
+Categories=Utility;Game;
+StartupWMClass=com.luair.overlay
+Keywords=crosshair;overlay;gaming;hud;
+X-GNOME-UsesNotifications=true

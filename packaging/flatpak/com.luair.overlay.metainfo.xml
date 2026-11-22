@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.luair.overlay</id>
+  <name>Luair</name>
+  <summary>Independent desktop crosshair overlay powered by Rust and Tauri v2</summary>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://github.com/confusionszn/luair</url>
+  <description>
+    <p>
+      Luair is a lightweight, open-source desktop crosshair overlay built with Rust and
+      Tauri v2. It displays a transparent, click-through crosshair canvas over games
+      with zero process injection, zero memory reading, and zero external accounts.
+    </p>
+    <ul>
+      <li>Crosshair X-class vector/canvas customizer with dynamic firing spread and recoil colors</li>
+      <li>10 quick-switch slots with non-blocking global keyboard and mouse hotkeys</li>
+      <li>Liquid Glass and Solid Minimalist dynamic theme engine</li>
+      <li>Encrypted local-only account vault backed by SQLite, Argon2id, and AES-256-GCM</li>
+      <li>Embedded Candle local GGUF AI assistant and prompt-to-design generator</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">com.luair.overlay.desktop</launchable>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="2.0.0" date="2026-11-22">
+      <description>
+        <p>Initial Luair v2 Rust + Tauri release across Windows, Linux, and macOS Universal.</p>
+      </description>
+    </release>
+  </releases>
+</component>

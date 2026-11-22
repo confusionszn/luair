@@ -1,0 +1,15 @@
+# Cross-platform compilation targets for Luair
+# Windows MSVC x86_64 (DirectX/GDI desktop overlay compatibility, dynamic /MD CRT matching WebView2)
+[target.x86_64-pc-windows-msvc]
+rustflags = []
+
+# Linux x86_64 GNU (Debian .deb, Arch PKGBUILD, Fedora .rpm, Flatpak & AppImage on X11/Wayland)
+[target.x86_64-unknown-linux-gnu]
+rustflags = []
+
+# macOS Universal Binary targets (Intel x86_64 + Apple Silicon aarch64)
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-mmacosx-version-min=11.0"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-mmacosx-version-min=11.0"]

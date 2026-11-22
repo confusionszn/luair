@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+:root {
+  --accent: #38bdf8;
+  --accent-fg: #05070c;
+  --accent-glow: rgba(56, 189, 248, 0.42);
+  --highlight: #818cf8;
+  --highlight-glow: rgba(129, 140, 248, 0.36);
+  --bg-color: #070913;
+  --panel-color: #101528;
+  --text-color: #eef4ff;
+  --muted-text: #8a99bd;
+  --bg-rgb: 7, 9, 19;
+  --panel-rgb: 16, 21, 40;
+  --accent-rgb: 56, 189, 248;
+  --highlight-rgb: 129, 140, 248;
+  --glass-blur: 22px;
+  --glass-opacity: 0.76;
+  --panel-opacity: 0.62;
+  --refraction-opacity: 0.78;
+  --radius: 16px;
+  --surface-subtle: rgba(255, 255, 255, 0.05);
+  --surface-input: rgba(0, 0, 0, 0.36);
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --pointer-x: 50%;
+  --pointer-y: 18%;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.luair-scroll {
+  scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+}
+
+.luair-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.luair-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.luair-scroll::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-rgb), 0.45);
+  border-radius: 9999px;
+}
+
+.luair-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+input[type="range"] {
+  accent-color: var(--accent);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* Liquid Glass & Minimalist Surface Primitives */
+.luair-glass-shell {
+  background-color: rgba(var(--bg-rgb), var(--glass-opacity));
+  backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+  box-shadow:
+    0 24px 72px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--refraction-opacity) * 0.28)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--refraction-opacity) * 0.08));
+}
+
+.luair-solid-shell {
+  background-color: var(--bg-color);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.luair-glass-panel {
+  background-color: rgba(var(--panel-rgb), var(--panel-opacity));
+  backdrop-filter: blur(calc(var(--glass-blur) * 0.65)) saturate(140%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.65)) saturate(140%);
+  border: 1px solid var(--border-subtle);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, calc(var(--refraction-opacity) * 0.16));
+}
+
+.luair-solid-panel {
+  background-color: var(--panel-color);
+  border: 1px solid var(--border-subtle);
+}
+
+.luair-refraction-ring {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, calc(var(--refraction-opacity) * 0.55)) 0%,
+    rgba(var(--accent-rgb), calc(var(--refraction-opacity) * 0.5)) 32%,
+    rgba(255, 255, 255, 0.06) 62%,
+    rgba(var(--highlight-rgb), calc(var(--refraction-opacity) * 0.45)) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.luair-dynamic-light {
+  background: radial-gradient(
+    460px circle at var(--pointer-x) var(--pointer-y),
+    rgba(var(--accent-rgb), 0.14),
+    rgba(var(--highlight-rgb), 0.06) 42%,
+    transparent 74%
+  );
+}

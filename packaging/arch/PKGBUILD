@@ -1,0 +1,51 @@
+# Maintainer: Luair Contributors <maintainers@luair.app>
+pkgname=luair
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="Independent, lightweight Rust + Tauri v2 desktop crosshair overlay with dynamic themes, local AI, and stream protection"
+arch=('x86_64' 'aarch64')
+url="https://github.com/confusionszn/luair"
+license=('MIT')
+depends=(
+  'webkit2gtk-4.1'
+  'gtk3'
+  'libayatana-appindicator'
+  'libx11'
+  'libxtst'
+  'openssl'
+)
+makedepends=(
+  'rust'
+  'cargo'
+  'nodejs'
+  'pnpm'
+  'pkgconf'
+)
+options=('!lto')
+source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  export CARGO_HOME="${srcdir}/.cargo"
+  pnpm install --frozen-lockfile || pnpm install
+  cargo fetch --locked --manifest-path src-tauri/Cargo.toml || cargo fetch --manifest-path src-tauri/Cargo.toml
+}
+
+build() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  export CARGO_HOME="${srcdir}/.cargo"
+  export WEBKIT_DISABLE_DMABUF_RENDERER=1
+  pnpm run tauri build --bundles none
+}
+
+package() {
+  cd "${srcdir}/${pkgname}-${pkgver}"
+  install -Dm755 "src-tauri/target/release/luair" "${pkgdir}/usr/bin/luair"
+  install -Dm644 "packaging/linux/com.luair.overlay.desktop" \
+    "${pkgdir}/usr/share/applications/com.luair.overlay.desktop"
+  install -Dm644 "src-tauri/icons/128x128.png" \
+    "${pkgdir}/usr/share/icons/hicolor/128x128/apps/com.luair.overlay.png"
+  install -Dm644 "public/luair-icon.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/com.luair.overlay.svg"
+}
