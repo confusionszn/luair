@@ -1,11 +1,11 @@
 use std::sync::{
-    atomic::AtomicBool,
+    atomic::{AtomicBool, AtomicU32},
     Arc, Mutex, RwLock,
 };
 
 use crate::{
     ai::AiManager,
-    hotkeys::HotkeyTable,
+    hotkeys::{notify_menu_hotkey_changed, HotkeyTable},
     schema::LuairState,
     vault::{AccountProfile, AuthSession, LocalVault, VAULT_ENGINE_NAME},
 };
@@ -14,6 +14,7 @@ pub struct AppState {
     pub state: Mutex<LuairState>,
     pub hotkey_table: Arc<RwLock<HotkeyTable>>,
     pub recording_hotkey: Arc<AtomicBool>,
+    pub win_hotkey_tid: Arc<AtomicU32>,
     pub vault: Mutex<LocalVault>,
     pub active_account: Mutex<Option<AccountProfile>>,
     pub remember_me: Mutex<bool>,
@@ -33,6 +34,7 @@ impl AppState {
             state: Mutex::new(initial),
             hotkey_table: Arc::new(RwLock::new(table)),
             recording_hotkey: Arc::new(AtomicBool::new(false)),
+            win_hotkey_tid: Arc::new(AtomicU32::new(0)),
             vault: Mutex::new(vault),
             active_account: Mutex::new(active_account),
             remember_me: Mutex::new(remember_me),
@@ -51,6 +53,7 @@ impl AppState {
         if let Ok(mut guard) = self.hotkey_table.write() {
             *guard = HotkeyTable::from_state(state);
         }
+        notify_menu_hotkey_changed(&self.win_hotkey_tid);
     }
 
     pub fn set_account_session(

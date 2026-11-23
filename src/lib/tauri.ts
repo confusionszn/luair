@@ -716,8 +716,8 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   if (!isTauriRuntime()) {
     return {
       available: false,
-      currentVersion: "2.0.1",
-      latestVersion: "2.0.1",
+      currentVersion: "2.0.2",
+      latestVersion: "2.0.2",
       releaseNotes: null,
       releaseDate: null,
       releaseUrl: "https://github.com/confusionszn/luair/releases",
@@ -740,7 +740,7 @@ export async function downloadAndInstallUpdate(): Promise<void> {
 export async function getPlatformInfo(): Promise<PlatformBuildInfo> {
   if (!isTauriRuntime()) {
     return {
-      appVersion: "2.0.1",
+      appVersion: "2.0.2",
       os: "browser-preview",
       arch: "wasm-web",
       targetTriple: "browser-preview",

@@ -23,6 +23,11 @@
   <launchable type="desktop-id">com.luair.overlay.desktop</launchable>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="2.0.2" date="2026-11-23">
+      <description>
+        <p>Fix Windows 10 overlay transparency, reliable F10 menu toggle, Windows ICO icon frames, and frameless launcher edge artifacts.</p>
+      </description>
+    </release>
     <release version="2.0.1" date="2026-11-22">
       <description>
         <p>Align WebView2 additionalBrowserArgs across dual overlay and menu windows.</p>

@@ -20,6 +20,15 @@ use crate::{ai::AiManager, state::AppState, vault::LocalVault};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+        let app_id: Vec<u16> = "com.luair.overlay\0".encode_utf16().collect();
+        unsafe {
+            let _ = SetCurrentProcessExplicitAppUserModelID(app_id.as_ptr());
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -52,10 +61,14 @@ pub fn run() {
                 AppState::new(initial_state, vault, active_account, remember_me, ai_manager);
             let hotkey_table = app_state.hotkey_table.clone();
             let recording_hotkey = app_state.recording_hotkey.clone();
+            let win_hotkey_tid = app_state.win_hotkey_tid.clone();
             app.manage(app_state);
 
             if let Some(overlay_win) = app.get_webview_window("overlay") {
                 let _ = overlay::configure_overlay_window(&overlay_win);
+            }
+            if let Some(menu_win) = app.get_webview_window("menu") {
+                let _ = overlay::configure_menu_window(&menu_win);
             }
 
             if initial_streamproof {
@@ -66,7 +79,12 @@ pub fn run() {
                 );
             }
 
-            hotkeys::spawn_global_listener(app.handle().clone(), hotkey_table, recording_hotkey);
+            hotkeys::spawn_global_listener(
+                app.handle().clone(),
+                hotkey_table,
+                recording_hotkey,
+                win_hotkey_tid,
+            );
 
             let toggle_item =
                 MenuItem::with_id(app, "toggle_menu", "Toggle Menu", true, None::<&str>)?;
@@ -129,11 +147,7 @@ pub fn run() {
                         }
                     }
                     "check_updates" => {
-                        if let Some(menu_win) = app.get_webview_window("menu") {
-                            let _ = menu_win.show();
-                            let _ = menu_win.unminimize();
-                            let _ = menu_win.set_focus();
-                        }
+                        let _ = overlay::show_and_focus_menu_window(app);
                         let _ = app.emit("luair://trigger-update-check", ());
                     }
                     "quit" => {

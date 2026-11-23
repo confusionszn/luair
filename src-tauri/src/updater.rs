@@ -509,4 +509,67 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn transparent_windows_disable_native_shadow() {
+        let raw = include_str!("../tauri.conf.json");
+        let parsed: serde_json::Value = serde_json::from_str(raw).expect("valid tauri.conf.json");
+        let windows = parsed["app"]["windows"]
+            .as_array()
+            .expect("app.windows array");
+
+        for label in ["overlay", "menu"] {
+            let win = windows
+                .iter()
+                .find(|w| w["label"].as_str() == Some(label))
+                .unwrap_or_else(|| panic!("missing window {label}"));
+            assert_eq!(win["transparent"], true, "{label} must be transparent");
+            assert_eq!(win["decorations"], false, "{label} must be undecorated");
+            assert_eq!(
+                win["shadow"], false,
+                "{label} must disable native Windows shadow to avoid edge box glitches"
+            );
+        }
+    }
+
+    #[test]
+    fn windows_ico_contains_valid_dib_and_png_frames() {
+        let ico = include_bytes!("../icons/icon.ico");
+        assert!(ico.len() >= 6 + 6 * 16);
+        assert_eq!(u16::from_le_bytes([ico[0], ico[1]]), 0);
+        assert_eq!(u16::from_le_bytes([ico[2], ico[3]]), 1);
+        let count = u16::from_le_bytes([ico[4], ico[5]]);
+        assert_eq!(count, 6);
+
+        let expected_sizes = [16u32, 24, 32, 48, 64, 256];
+        for (idx, &expected) in expected_sizes.iter().enumerate() {
+            let entry = &ico[6 + idx * 16..6 + (idx + 1) * 16];
+            let width = if entry[0] == 0 { 256 } else { entry[0] as u32 };
+            let height = if entry[1] == 0 { 256 } else { entry[1] as u32 };
+            let planes = u16::from_le_bytes([entry[4], entry[5]]);
+            let bpp = u16::from_le_bytes([entry[6], entry[7]]);
+            let bytes_in_res = u32::from_le_bytes([entry[8], entry[9], entry[10], entry[11]]) as usize;
+            let image_offset =
+                u32::from_le_bytes([entry[12], entry[13], entry[14], entry[15]]) as usize;
+
+            assert_eq!(width, expected);
+            assert_eq!(height, expected);
+            assert_eq!(planes, 1, "ICO frame {expected} must have planes == 1");
+            assert_eq!(bpp, 32, "ICO frame {expected} must have bpp == 32");
+
+            let frame = &ico[image_offset..image_offset + bytes_in_res];
+            if expected < 256 {
+                let bi_size = u32::from_le_bytes([frame[0], frame[1], frame[2], frame[3]]);
+                let bi_bpp = u16::from_le_bytes([frame[14], frame[15]]);
+                assert_eq!(bi_size, 40, "DIB frame {expected} must start with BITMAPINFOHEADER");
+                assert_eq!(bi_bpp, 32, "DIB frame {expected} must be 32bpp");
+            } else {
+                assert_eq!(
+                    &frame[0..4],
+                    &[0x89, 0x50, 0x4E, 0x47],
+                    "256px frame must be PNG-encoded"
+                );
+            }
+        }
+    }
 }

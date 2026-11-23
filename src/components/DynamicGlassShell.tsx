@@ -32,6 +32,7 @@ export function DynamicGlassShell({
       style={{
         borderRadius: isMaximized ? "0px" : "var(--radius)",
         color: "var(--text-color)",
+        isolation: "isolate",
       }}
       className={`relative flex h-full w-full flex-col overflow-hidden transition-[border-radius] duration-200 ${
         isGlass ? "luair-glass-shell" : "luair-solid-shell"
@@ -41,21 +42,21 @@ export function DynamicGlassShell({
       {isGlass && (
         <>
           <div
-            className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full opacity-25 blur-3xl transition-colors duration-500"
-            style={{ background: "var(--accent)" }}
+            className="pointer-events-none absolute inset-0 overflow-hidden rounded-[inherit]"
             aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute -right-24 -bottom-24 h-80 w-80 rounded-full opacity-20 blur-3xl transition-colors duration-500"
-            style={{ background: "var(--highlight)" }}
-            aria-hidden="true"
-          />
-          {theme.dynamicLighting && (
+          >
             <div
-              className="luair-dynamic-light pointer-events-none absolute inset-0 transition-opacity duration-300"
-              aria-hidden="true"
+              className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full opacity-25 blur-3xl transition-colors duration-500"
+              style={{ background: "var(--accent)" }}
             />
-          )}
+            <div
+              className="pointer-events-none absolute -right-24 -bottom-24 h-80 w-80 rounded-full opacity-20 blur-3xl transition-colors duration-500"
+              style={{ background: "var(--highlight)" }}
+            />
+            {theme.dynamicLighting && (
+              <div className="luair-dynamic-light pointer-events-none absolute inset-0 transition-opacity duration-300" />
+            )}
+          </div>
           <div className="luair-refraction-ring z-30" aria-hidden="true" />
         </>
       )}

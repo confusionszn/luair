@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    mpsc, Arc, RwLock,
+    atomic::{AtomicBool, AtomicU32, Ordering},
+    mpsc, Arc, Mutex, RwLock,
 };
 use std::thread;
 use std::time::{Duration, Instant};
@@ -10,6 +10,9 @@ use rdev::{listen, Button, Event, EventType, Key};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{overlay, schema::LuairState, state::AppState, storage};
+
+const STALE_KEY_TIMEOUT: Duration = Duration::from_millis(1200);
+const MENU_TOGGLE_DEBOUNCE: Duration = Duration::from_millis(250);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InputTrigger {
@@ -376,18 +379,219 @@ pub fn match_action(
     None
 }
 
+pub fn key_to_win_vk(key: Key) -> Option<u32> {
+    match key {
+        Key::F1 => Some(0x70),
+        Key::F2 => Some(0x71),
+        Key::F3 => Some(0x72),
+        Key::F4 => Some(0x73),
+        Key::F5 => Some(0x74),
+        Key::F6 => Some(0x75),
+        Key::F7 => Some(0x76),
+        Key::F8 => Some(0x77),
+        Key::F9 => Some(0x78),
+        Key::F10 => Some(0x79),
+        Key::F11 => Some(0x7A),
+        Key::F12 => Some(0x7B),
+        Key::Num0 => Some(0x30),
+        Key::Num1 => Some(0x31),
+        Key::Num2 => Some(0x32),
+        Key::Num3 => Some(0x33),
+        Key::Num4 => Some(0x34),
+        Key::Num5 => Some(0x35),
+        Key::Num6 => Some(0x36),
+        Key::Num7 => Some(0x37),
+        Key::Num8 => Some(0x38),
+        Key::Num9 => Some(0x39),
+        Key::Kp0 => Some(0x60),
+        Key::Kp1 => Some(0x61),
+        Key::Kp2 => Some(0x62),
+        Key::Kp3 => Some(0x63),
+        Key::Kp4 => Some(0x64),
+        Key::Kp5 => Some(0x65),
+        Key::Kp6 => Some(0x66),
+        Key::Kp7 => Some(0x67),
+        Key::Kp8 => Some(0x68),
+        Key::Kp9 => Some(0x69),
+        Key::KeyA => Some(0x41),
+        Key::KeyB => Some(0x42),
+        Key::KeyC => Some(0x43),
+        Key::KeyD => Some(0x44),
+        Key::KeyE => Some(0x45),
+        Key::KeyF => Some(0x46),
+        Key::KeyG => Some(0x47),
+        Key::KeyH => Some(0x48),
+        Key::KeyI => Some(0x49),
+        Key::KeyJ => Some(0x4A),
+        Key::KeyK => Some(0x4B),
+        Key::KeyL => Some(0x4C),
+        Key::KeyM => Some(0x4D),
+        Key::KeyN => Some(0x4E),
+        Key::KeyO => Some(0x4F),
+        Key::KeyP => Some(0x50),
+        Key::KeyQ => Some(0x51),
+        Key::KeyR => Some(0x52),
+        Key::KeyS => Some(0x53),
+        Key::KeyT => Some(0x54),
+        Key::KeyU => Some(0x55),
+        Key::KeyV => Some(0x56),
+        Key::KeyW => Some(0x57),
+        Key::KeyX => Some(0x58),
+        Key::KeyY => Some(0x59),
+        Key::KeyZ => Some(0x5A),
+        Key::Home => Some(0x24),
+        Key::End => Some(0x23),
+        Key::Insert => Some(0x2D),
+        Key::Delete => Some(0x2E),
+        Key::PageUp => Some(0x21),
+        Key::PageDown => Some(0x22),
+        Key::Escape => Some(0x1B),
+        Key::Tab => Some(0x09),
+        Key::Space => Some(0x20),
+        Key::CapsLock => Some(0x14),
+        Key::BackQuote => Some(0xC0),
+        Key::Minus => Some(0xBD),
+        Key::Equal => Some(0xBB),
+        Key::LeftBracket => Some(0xDB),
+        Key::RightBracket => Some(0xDD),
+        Key::SemiColon => Some(0xBA),
+        Key::Quote => Some(0xDE),
+        Key::BackSlash => Some(0xDC),
+        Key::Comma => Some(0xBC),
+        Key::Dot => Some(0xBE),
+        Key::Slash => Some(0xBF),
+        Key::UpArrow => Some(0x26),
+        Key::DownArrow => Some(0x28),
+        Key::LeftArrow => Some(0x25),
+        Key::RightArrow => Some(0x27),
+        Key::Return => Some(0x0D),
+        Key::Backspace => Some(0x08),
+        _ => None,
+    }
+}
+
+pub fn should_accept_key_press(
+    pressed_keys: &mut HashMap<Key, Instant>,
+    key: Key,
+    now: Instant,
+) -> bool {
+    match pressed_keys.get(&key).copied() {
+        Some(prev) if now.duration_since(prev) < STALE_KEY_TIMEOUT => {
+            pressed_keys.insert(key, now);
+            false
+        }
+        _ => {
+            pressed_keys.insert(key, now);
+            true
+        }
+    }
+}
+
+pub fn notify_menu_hotkey_changed(win_hotkey_tid: &AtomicU32) {
+    #[cfg(target_os = "windows")]
+    {
+        let tid = win_hotkey_tid.load(Ordering::Acquire);
+        if tid != 0 {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_APP};
+            unsafe {
+                let _ = PostThreadMessageW(tid, WM_APP + 1, 0, 0);
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = win_hotkey_tid;
+}
+
+#[cfg(target_os = "windows")]
+fn sync_windows_modifiers(mods: &mut ModifierState) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    let is_down = |vk: i32| -> bool { unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 } };
+    mods.ctrl_left = is_down(0xA2);
+    mods.ctrl_right = is_down(0xA3);
+    mods.shift_left = is_down(0xA0);
+    mods.shift_right = is_down(0xA1);
+    mods.alt_left = is_down(0xA4);
+    mods.alt_right = is_down(0xA5);
+    mods.meta_left = is_down(0x5B);
+    mods.meta_right = is_down(0x5C);
+}
+
+#[cfg(target_os = "windows")]
+fn sync_registered_menu_hotkey(
+    table: &Arc<RwLock<HotkeyTable>>,
+    recording: &Arc<AtomicBool>,
+    active_registered: &mut bool,
+) {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
+    };
+    const MENU_HOTKEY_ID: i32 = 1;
+
+    if *active_registered {
+        unsafe {
+            let _ = UnregisterHotKey(std::ptr::null_mut(), MENU_HOTKEY_ID);
+        }
+        *active_registered = false;
+    }
+
+    if recording.load(Ordering::Relaxed) {
+        return;
+    }
+
+    let menu_bind = table.read().ok().and_then(|guard| guard.menu_toggle.clone());
+    if let Some(bind) = menu_bind {
+        if let InputTrigger::Key(key) = bind.trigger {
+            if let Some(vk) = key_to_win_vk(key) {
+                let mut fs_mods = MOD_NOREPEAT;
+                if bind.ctrl {
+                    fs_mods |= MOD_CONTROL;
+                }
+                if bind.shift {
+                    fs_mods |= MOD_SHIFT;
+                }
+                if bind.alt {
+                    fs_mods |= MOD_ALT;
+                }
+                if bind.meta {
+                    fs_mods |= MOD_WIN;
+                }
+                let ok =
+                    unsafe { RegisterHotKey(std::ptr::null_mut(), MENU_HOTKEY_ID, fs_mods, vk) };
+                if ok != 0 {
+                    *active_registered = true;
+                }
+            }
+        }
+    }
+}
+
+fn try_toggle_menu(app: &AppHandle, last_menu_toggle: &Arc<Mutex<Instant>>) -> bool {
+    let now = Instant::now();
+    let allowed = if let Ok(mut guard) = last_menu_toggle.lock() {
+        if now.duration_since(*guard) >= MENU_TOGGLE_DEBOUNCE {
+            *guard = now;
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    if allowed {
+        let _ = overlay::toggle_menu_window(app);
+    }
+    allowed
+}
+
 fn dispatch_action(
     app: &AppHandle,
     action: HotkeyAction,
-    last_menu_toggle: &mut Instant,
+    last_menu_toggle: &Arc<Mutex<Instant>>,
 ) {
     match action {
         HotkeyAction::ToggleMenu => {
-            let now = Instant::now();
-            if now.duration_since(*last_menu_toggle) >= Duration::from_millis(200) {
-                *last_menu_toggle = now;
-                let _ = overlay::toggle_menu_window(app);
-            }
+            let _ = try_toggle_menu(app, last_menu_toggle);
         }
         HotkeyAction::ToggleAds => {
             let app_state = app.state::<AppState>();
@@ -427,7 +631,59 @@ pub fn spawn_global_listener(
     app: AppHandle,
     table: Arc<RwLock<HotkeyTable>>,
     recording: Arc<AtomicBool>,
+    win_hotkey_tid: Arc<AtomicU32>,
 ) {
+    let last_menu_toggle = Arc::new(Mutex::new(
+        Instant::now() - Duration::from_millis(500),
+    ));
+
+    #[cfg(target_os = "windows")]
+    {
+        let win_app = app.clone();
+        let win_table = Arc::clone(&table);
+        let win_recording = Arc::clone(&recording);
+        let win_last_toggle = Arc::clone(&last_menu_toggle);
+        let win_tid = Arc::clone(&win_hotkey_tid);
+        let _ = thread::Builder::new()
+            .name("luair-win-hotkey".to_string())
+            .spawn(move || {
+                use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+                use windows_sys::Win32::UI::WindowsAndMessaging::{
+                    GetMessageW, PeekMessageW, MSG, PM_NOREMOVE, WM_APP, WM_HOTKEY,
+                };
+
+                const MENU_HOTKEY_ID: usize = 1;
+                const WM_SYNC_HOTKEY: u32 = WM_APP + 1;
+
+                let mut msg: MSG = unsafe { std::mem::zeroed() };
+                unsafe {
+                    let _ = PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
+                }
+                let tid = unsafe { GetCurrentThreadId() };
+                win_tid.store(tid, Ordering::Release);
+
+                let mut active_registered = false;
+                sync_registered_menu_hotkey(&win_table, &win_recording, &mut active_registered);
+
+                while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
+                    if msg.message == WM_HOTKEY && msg.wParam == MENU_HOTKEY_ID {
+                        if !win_recording.load(Ordering::Relaxed) {
+                            let _ = try_toggle_menu(&win_app, &win_last_toggle);
+                        }
+                    } else if msg.message == WM_SYNC_HOTKEY {
+                        sync_registered_menu_hotkey(
+                            &win_table,
+                            &win_recording,
+                            &mut active_registered,
+                        );
+                    }
+                }
+            });
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    let _ = win_hotkey_tid;
+
     let (tx, rx) = mpsc::channel::<EventType>();
 
     let _ = thread::Builder::new()
@@ -453,9 +709,8 @@ pub fn spawn_global_listener(
         .name("luair-hotkey-worker".to_string())
         .spawn(move || {
             let mut mods = ModifierState::default();
-            let mut pressed_keys: HashSet<Key> = HashSet::new();
+            let mut pressed_keys: HashMap<Key, Instant> = HashMap::new();
             let mut pressed_buttons: HashSet<Button> = HashSet::new();
-            let mut last_menu_toggle = Instant::now() - Duration::from_millis(500);
             let mut firing_emitted = false;
 
             while let Ok(event_type) = rx.recv() {
@@ -465,10 +720,13 @@ pub fn spawn_global_listener(
                         pressed_keys.remove(&key);
                     }
                     EventType::KeyPress(key) => {
+                        #[cfg(target_os = "windows")]
+                        sync_windows_modifiers(&mut mods);
+
                         if mods.update(key, true) {
                             continue;
                         }
-                        if !pressed_keys.insert(key) {
+                        if !should_accept_key_press(&mut pressed_keys, key, Instant::now()) {
                             continue;
                         }
                         if recording.load(Ordering::Relaxed) {
@@ -485,7 +743,7 @@ pub fn spawn_global_listener(
                         });
 
                         if let Some(action) = action {
-                            dispatch_action(&app, action, &mut last_menu_toggle);
+                            dispatch_action(&app, action, &last_menu_toggle);
                         }
                     }
                     EventType::ButtonRelease(btn) => {
@@ -496,6 +754,9 @@ pub fn spawn_global_listener(
                         }
                     }
                     EventType::ButtonPress(btn) => {
+                        #[cfg(target_os = "windows")]
+                        sync_windows_modifiers(&mut mods);
+
                         if recording.load(Ordering::Relaxed) {
                             if btn != Button::Left {
                                 let formatted = format_mouse_binding(&mods, btn);
@@ -535,7 +796,7 @@ pub fn spawn_global_listener(
                         }
 
                         if let Some(action) = action {
-                            dispatch_action(&app, action, &mut last_menu_toggle);
+                            dispatch_action(&app, action, &last_menu_toggle);
                         }
                     }
                     _ => {}
@@ -549,6 +810,7 @@ pub fn set_hotkey_recording(app_state: State<'_, AppState>, recording: bool) {
     app_state
         .recording_hotkey
         .store(recording, Ordering::Relaxed);
+    notify_menu_hotkey_changed(&app_state.win_hotkey_tid);
 }
 
 #[cfg(test)]
@@ -762,5 +1024,30 @@ mod tests {
             ),
             Some(HotkeyAction::SwitchProfile("slot-3".to_string()))
         );
+    }
+
+    #[test]
+    fn maps_common_keys_including_f10_to_win_vk() {
+        assert_eq!(key_to_win_vk(Key::F10), Some(0x79));
+        assert_eq!(key_to_win_vk(Key::Home), Some(0x24));
+        assert_eq!(key_to_win_vk(Key::KeyX), Some(0x58));
+        assert_eq!(key_to_win_vk(Key::Num1), Some(0x31));
+    }
+
+    #[test]
+    fn stale_pressed_key_recovers_after_timeout() {
+        let mut pressed = HashMap::new();
+        let t0 = Instant::now();
+        assert!(should_accept_key_press(&mut pressed, Key::F10, t0));
+        assert!(!should_accept_key_press(
+            &mut pressed,
+            Key::F10,
+            t0 + Duration::from_millis(200)
+        ));
+        assert!(should_accept_key_press(
+            &mut pressed,
+            Key::F10,
+            t0 + Duration::from_millis(1450)
+        ));
     }
 }

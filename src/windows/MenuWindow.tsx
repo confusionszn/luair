@@ -342,6 +342,19 @@ export function MenuWindow() {
   };
 
   useEffect(() => {
+    if (recording) return;
+    const suppressF10MenuActivation = (e: KeyboardEvent) => {
+      if (e.code === "F10") {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", suppressF10MenuActivation);
+    return () => {
+      window.removeEventListener("keydown", suppressF10MenuActivation);
+    };
+  }, [recording]);
+
+  useEffect(() => {
     if (!recording) {
       void setHotkeyRecording(false);
       return;
