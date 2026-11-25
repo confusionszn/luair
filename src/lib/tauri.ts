@@ -592,27 +592,60 @@ function browserAiPreviewCrosshair(current: LuairState, prompt: string): AiApply
   if (lower.includes("lime")) nextCrosshair.color = "#84cc16";
   else if (lower.includes("purple")) nextCrosshair.color = "#a855f7";
   else if (lower.includes("red") || lower.includes("crimson")) nextCrosshair.color = "#f43f5e";
+  else if (lower.includes("gold") || lower.includes("yellow")) nextCrosshair.color = "#f59e0b";
   else if (lower.includes("cyan")) nextCrosshair.color = "#22d3ee";
 
-  if (lower.includes("dot")) {
+  if (lower.includes("t-shape") || lower.includes("t shape")) {
+    nextCrosshair.tShape = true;
+    nextCrosshair.hideBars = false;
+  } else if (lower.includes("dot")) {
     nextCrosshair.dot = true;
-    nextCrosshair.hideBars = !lower.includes("cross") && !lower.includes("t-shape");
+    nextCrosshair.hideBars = !lower.includes("cross");
+  }
+  if (lower.includes("circle") || lower.includes("ring") || lower.includes("shotgun")) {
+    nextCrosshair.hasCircle = true;
   }
   if (lower.includes("thin border")) {
     nextCrosshair.outline = true;
     nextCrosshair.outlineThickness = 1;
   }
-  const keyMatch = /\b(?:key|slot)\s+([0-9])\b/.exec(lower);
+
+  const keyMatch = /\b(?:key|on)\s+([0-9])\b/.exec(lower);
+  const slotMatch = /\b(?:preset|profile|slot)\s+([0-9]|10)\b/.exec(lower);
+  const calledMatch = /(?:called|named)\s+["']?([a-z0-9 _-]{2,28})/i.exec(prompt);
   const boundHotkey = keyMatch ? keyMatch[1] : null;
-  const profiles = current.profiles.map((p, idx) =>
-    boundHotkey && String(idx + 1) === boundHotkey
-      ? { ...p, hotkey: boundHotkey, config: nextCrosshair }
-      : p,
-  );
+  let profiles = [...current.profiles];
+  let activeProfileId = current.activeProfileId;
+
+  if (slotMatch) {
+    const idx = Number.parseInt(slotMatch[1], 10) - 1;
+    if (profiles[idx]) {
+      profiles[idx] = {
+        ...profiles[idx],
+        config: nextCrosshair,
+        hotkey: boundHotkey ?? profiles[idx].hotkey,
+      };
+      activeProfileId = profiles[idx].id;
+    }
+  } else if (lower.includes("preset") && (lower.includes("new") || lower.includes("create") || lower.includes("make"))) {
+    const rawName = calledMatch?.[1]?.split(/\bwith\b|\bon\b/i)[0]?.trim() || "AI Preset";
+    const id = `ai-slot-${Date.now()}`;
+    const hk = boundHotkey ?? String(profiles.length + 1);
+    profiles.push({ id, name: rawName, hotkey: hk, config: nextCrosshair });
+    activeProfileId = id;
+  } else {
+    profiles = profiles.map((p, idx) =>
+      boundHotkey && String(idx + 1) === boundHotkey
+        ? { ...p, hotkey: boundHotkey, config: nextCrosshair }
+        : p,
+    );
+  }
+
   const nextState: LuairState = {
     ...current,
     crosshair: nextCrosshair,
     profiles,
+    activeProfileId,
   };
   writeBrowserState(nextState);
   window.dispatchEvent(new CustomEvent("luair-browser-state", { detail: nextState }));
@@ -745,10 +778,16 @@ export async function aiChat(
         updatedState: res.state,
       };
     }
-    if ((lower.includes("crosshair") || lower.includes("dot")) && lower.includes("make")) {
+    if (
+      lower.includes("preset") ||
+      lower.includes("crosshair") ||
+      lower.includes("dot") ||
+      lower.includes("t-shape") ||
+      lower.includes("circle")
+    ) {
       const res = browserAiPreviewCrosshair(readBrowserState(), prompt);
       return {
-        reply: res.summary,
+        reply: `Done — ${res.summary}`,
         engineUsed: res.engineUsed,
         appliedAction: res.summary,
         updatedState: res.state,
@@ -780,8 +819,8 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   if (!isTauriRuntime()) {
     return {
       available: false,
-      currentVersion: "2.0.3",
-      latestVersion: "2.0.3",
+      currentVersion: "2.0.4",
+      latestVersion: "2.0.4",
       releaseNotes: null,
       releaseDate: null,
       releaseUrl: "https://github.com/confusionszn/luair/releases",
@@ -804,7 +843,7 @@ export async function downloadAndInstallUpdate(): Promise<void> {
 export async function getPlatformInfo(): Promise<PlatformBuildInfo> {
   if (!isTauriRuntime()) {
     return {
-      appVersion: "2.0.3",
+      appVersion: "2.0.4",
       os: "browser-preview",
       arch: "wasm-web",
       targetTriple: "browser-preview",

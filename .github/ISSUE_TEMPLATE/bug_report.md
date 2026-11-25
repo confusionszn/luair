@@ -7,7 +7,7 @@ labels: bug
 
 ## Environment
 - **OS & Version**: (e.g. Windows 10/11, Ubuntu 24.04 X11/Wayland, macOS 15 Sequoia)
-- **Luair Version**: (e.g. v2.0.3)
+- **Luair Version**: (e.g. v2.0.4)
 - **Display / Game Mode**: (Borderless Windowed / Fullscreen / Multi-Monitor DPI)
 
 ## Description

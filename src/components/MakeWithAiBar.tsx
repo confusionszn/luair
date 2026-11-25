@@ -99,7 +99,8 @@ export function MakeWithAiBar({
               <div className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5 text-[11px] font-bold text-[var(--accent)]">
                   <Wand2 className="h-3.5 w-3.5" />
-                  Describe the {mode === "crosshair" ? "Crosshair & Keybind" : "Theme"} to
+                  Describe the{" "}
+                  {mode === "crosshair" ? "Crosshair, Preset & Keybind" : "Theme"} to
                   Generate
                 </span>
                 <button

@@ -180,7 +180,7 @@ export function SettingsTab({
               <div className="text-xs font-bold">
                 Current Version:{" "}
                 <span className="font-mono text-[var(--accent)]">
-                  v{platformInfo?.appVersion ?? updateInfo?.currentVersion ?? "2.0.3"}
+                  v{platformInfo?.appVersion ?? updateInfo?.currentVersion ?? "2.0.4"}
                 </span>
               </div>
               <div className="mt-0.5 text-[10px] text-[var(--muted-text)]">

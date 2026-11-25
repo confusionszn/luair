@@ -12,13 +12,14 @@ import {
   Upload,
 } from "lucide-react";
 import { CrosshairCanvas } from "./CrosshairCanvas";
+import { MakeWithAiBar } from "./MakeWithAiBar";
 import { PanelCard } from "./UiPrimitives";
 import {
   encodeCrosshairCode,
   exportCrosshairJson,
   importCrosshairInput,
 } from "../lib/crosshairCodec";
-import type { CrosshairConfig, CrosshairProfile } from "../types/crosshair";
+import type { CrosshairConfig, CrosshairProfile, LuairState } from "../types/crosshair";
 import type { ThemeSurfaceMode } from "../types/themes";
 
 interface ProfilesTabProps {
@@ -39,6 +40,7 @@ interface ProfilesTabProps {
   onManualBind: (profileId: string, hotkey: string | null) => void;
   onImportCrosshair: (config: CrosshairConfig) => void;
   onImportAsProfile: (config: CrosshairConfig, name: string) => void;
+  onAiApplied: (nextState: LuairState) => void;
 }
 
 const MOUSE_QUICK_BINDS = [
@@ -67,6 +69,7 @@ export function ProfilesTab({
   onManualBind,
   onImportCrosshair,
   onImportAsProfile,
+  onAiApplied,
 }: ProfilesTabProps) {
   const [newProfileName, setNewProfileName] = useState("");
   const [importText, setImportText] = useState("");
@@ -165,6 +168,16 @@ export function ProfilesTab({
 
   return (
     <div className="space-y-4">
+      <MakeWithAiBar
+        mode="crosshair"
+        examples={[
+          "Create a preset called Sniper with a crimson dot on key 5",
+          "Put a cyan T-shape crosshair on preset 2",
+          "Create presets for Rifle, Pistol, and Shotgun",
+        ]}
+        onApplied={onAiApplied}
+      />
+
       {/* Global Non-Blocking Pass-Through Banner */}
       <PanelCard
         surfaceMode={surfaceMode}

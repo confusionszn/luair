@@ -905,6 +905,7 @@ export function MenuWindow() {
                         onManualBind={handleManualBind}
                         onImportCrosshair={handleImportCrosshair}
                         onImportAsProfile={handleImportAsProfile}
+                        onAiApplied={(nextState) => setState(nextState)}
                       />
                     )}
 

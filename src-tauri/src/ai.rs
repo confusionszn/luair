@@ -71,7 +71,7 @@ pub fn build_http_agent() -> ureq::Agent {
         .timeout_connect(Some(Duration::from_secs(30)))
         .timeout_recv_response(Some(Duration::from_secs(30)))
         .timeout_per_read(Some(Duration::from_secs(45)))
-        .user_agent("Luair/2.0.3")
+        .user_agent("Luair/2.0.4")
         .build();
     config.into()
 }
@@ -878,29 +878,53 @@ fn extract_hex_color(lower: &str) -> Option<String> {
     None
 }
 
+fn strip_outline_color_phrases(lower: &str) -> String {
+    let mut cleaned = lower.to_string();
+    for phrase in [
+        "black outline",
+        "black border",
+        "white outline",
+        "white border",
+        "dark outline",
+        "dark border",
+        "thin border",
+        "thin outline",
+    ] {
+        cleaned = cleaned.replace(phrase, " ");
+    }
+    cleaned
+}
+
 fn detect_named_color(lower: &str) -> Option<(&'static str, &'static str)> {
-    if lower.contains("lime") {
-        Some(("#84cc16", "lime green"))
-    } else if lower.contains("emerald") || lower.contains("matrix") {
-        Some(("#10b981", "emerald green"))
-    } else if lower.contains("green") {
-        Some(("#22c55e", "green"))
-    } else if lower.contains("cyan") || lower.contains("aqua") || lower.contains("ice") {
-        Some(("#22d3ee", "cyan"))
-    } else if lower.contains("blue") || lower.contains("cobalt") || lower.contains("ocean") {
-        Some(("#38bdf8", "electric blue"))
-    } else if lower.contains("purple") || lower.contains("violet") {
-        Some(("#a855f7", "neon purple"))
-    } else if lower.contains("magenta") || lower.contains("pink") {
-        Some(("#ec4899", "magenta pink"))
-    } else if lower.contains("crimson") || lower.contains("red") {
-        Some(("#f43f5e", "crimson red"))
-    } else if lower.contains("gold") || lower.contains("yellow") || lower.contains("amber") {
-        Some(("#f59e0b", "solar gold"))
-    } else if lower.contains("orange") {
-        Some(("#fb923c", "orange"))
-    } else if lower.contains("white") {
-        Some(("#ffffff", "crisp white"))
+    let color_text = strip_outline_color_phrases(lower);
+    if color_text.contains("lime") {
+        Some(("#84cc16", "Lime Green"))
+    } else if color_text.contains("emerald") || color_text.contains("matrix") {
+        Some(("#10b981", "Emerald"))
+    } else if color_text.contains("green") {
+        Some(("#22c55e", "Green"))
+    } else if color_text.contains("turquoise") || color_text.contains("teal") {
+        Some(("#14b8a6", "Teal"))
+    } else if color_text.contains("cyan") || color_text.contains("aqua") || color_text.contains("ice") {
+        Some(("#22d3ee", "Cyan"))
+    } else if color_text.contains("sky") {
+        Some(("#38bdf8", "Sky Blue"))
+    } else if color_text.contains("indigo") {
+        Some(("#818cf8", "Indigo"))
+    } else if color_text.contains("blue") || color_text.contains("cobalt") || color_text.contains("ocean") {
+        Some(("#38bdf8", "Blue"))
+    } else if color_text.contains("purple") || color_text.contains("violet") {
+        Some(("#a855f7", "Purple"))
+    } else if color_text.contains("magenta") || color_text.contains("pink") {
+        Some(("#ec4899", "Pink"))
+    } else if color_text.contains("crimson") || color_text.contains("red") {
+        Some(("#f43f5e", "Crimson"))
+    } else if color_text.contains("gold") || color_text.contains("yellow") || color_text.contains("amber") {
+        Some(("#f59e0b", "Gold"))
+    } else if color_text.contains("orange") {
+        Some(("#fb923c", "Orange"))
+    } else if color_text.contains("white") {
+        Some(("#ffffff", "White"))
     } else {
         None
     }
@@ -908,7 +932,15 @@ fn detect_named_color(lower: &str) -> Option<(&'static str, &'static str)> {
 
 fn detect_requested_hotkey(prompt: &str) -> Option<String> {
     let lower = prompt.to_ascii_lowercase();
-    for token in ["mouse4", "mouse5", "mousemiddle", "mouseright", "mouseleft", "xbutton1", "xbutton2"] {
+    for token in [
+        "mouse4",
+        "mouse5",
+        "mousemiddle",
+        "mouseright",
+        "mouseleft",
+        "xbutton1",
+        "xbutton2",
+    ] {
         if lower.contains(token) {
             let normalized = match token {
                 "xbutton1" => "Mouse4",
@@ -930,15 +962,28 @@ fn detect_requested_hotkey(prompt: &str) -> Option<String> {
         .collect();
 
     for (idx, &w) in words.iter().enumerate() {
-        if matches!(w, "key" | "slot" | "hotkey" | "button" | "bind") {
+        if matches!(w, "key" | "hotkey" | "bind" | "bound" | "button") {
             if let Some(&next) = words.get(idx + 1) {
-                if next == "to" || next == "on" || next == "as" {
+                if matches!(next, "to" | "on" | "as" | "is") {
                     if let Some(&target) = words.get(idx + 2) {
                         if hotkeys::parse_hotkey(target).is_some() {
                             return Some(target.to_ascii_uppercase());
                         }
                     }
                 } else if hotkeys::parse_hotkey(next).is_some() {
+                    return Some(next.to_ascii_uppercase());
+                }
+            }
+        }
+        if matches!(w, "slot" | "preset") {
+            continue;
+        }
+        if w == "on" && idx > 0 && !matches!(words[idx - 1], "preset" | "profile" | "slot") {
+            if let Some(&next) = words.get(idx + 1) {
+                if next.len() == 1
+                    && next.chars().all(|c| c.is_ascii_digit())
+                    && hotkeys::parse_hotkey(next).is_some()
+                {
                     return Some(next.to_ascii_uppercase());
                 }
             }
@@ -1058,6 +1103,8 @@ pub fn synthesize_crosshair_from_prompt(
             cfg.gradient_color = "#f472b6".to_string();
         } else if lower.contains("purple") || lower.contains("violet") {
             cfg.gradient_color = "#a855f7".to_string();
+        } else if lower.contains("orange") || lower.contains("gold") {
+            cfg.gradient_color = "#fb923c".to_string();
         }
     } else if lower.contains("rainbow") || lower.contains("rgb") {
         cfg.color_mode = "rainbow".to_string();
@@ -1067,17 +1114,36 @@ pub fn synthesize_crosshair_from_prompt(
         cfg.rainbow = false;
     }
 
-    let wants_dot_only = lower.contains("dot")
+    let explicit_bars = lower.contains("t-shape")
+        || lower.contains("t shape")
+        || lower.contains("plus")
+        || lower.contains("bars")
+        || lower.contains("x-shape")
+        || lower.contains("diagonal")
+        || lower.contains("valorant")
+        || lower.contains("rifle")
+        || lower.contains("vandal")
+        || lower.contains("phantom");
+
+    let wants_dot_only = (lower.contains("dot")
         && (lower.contains("only")
             || lower.contains("cs2")
             || lower.contains("clean")
-            || (!lower.contains("cross") && !lower.contains("t-shape") && !lower.contains("bars")));
+            || lower.contains("precision")
+            || lower.contains("pistol")
+            || lower.contains("sheriff")
+            || lower.contains("deagle")
+            || lower.contains("sniper")
+            || lower.contains("awp")
+            || !explicit_bars))
+        || (lower.contains("sniper") && !lower.contains("cross"))
+        || (lower.contains("awp") && !lower.contains("cross"));
 
     if wants_dot_only {
         cfg.dot = true;
         cfg.hide_bars = true;
         cfg.t_shape = false;
-        cfg.dot_size = if lower.contains("tiny") || lower.contains("small") {
+        cfg.dot_size = if lower.contains("tiny") || lower.contains("micro") || lower.contains("small") {
             3
         } else if lower.contains("large") || lower.contains("big") {
             7
@@ -1093,7 +1159,10 @@ pub fn synthesize_crosshair_from_prompt(
         if lower.contains("dot") {
             cfg.dot = true;
         }
-        if lower.contains("cross") || lower.contains("bars") {
+        if lower.contains("no dot") || lower.contains("without dot") {
+            cfg.dot = false;
+        }
+        if explicit_bars || lower.contains("crosshair") || lower.contains("cross") || lower.contains("reticle") {
             cfg.hide_bars = false;
         }
         if lower.contains("t-shape") || lower.contains("t shape") {
@@ -1102,11 +1171,55 @@ pub fn synthesize_crosshair_from_prompt(
         }
     }
 
+    if lower.contains("valorant") {
+        cfg.hide_bars = false;
+        cfg.length = 6;
+        cfg.thickness = 2;
+        cfg.gap = 3;
+        cfg.outline = true;
+        cfg.outline_thickness = 1;
+    } else if lower.contains("rifle") || lower.contains("vandal") || lower.contains("phantom") {
+        cfg.hide_bars = false;
+        cfg.length = 10;
+        cfg.thickness = 2;
+        cfg.gap = 4;
+        cfg.outline = true;
+    }
+
+    if lower.contains("x-shape") || lower.contains("diagonal") {
+        cfg.rotation = 45;
+        cfg.hide_bars = false;
+    }
+    if lower.contains("square") {
+        cfg.dot = true;
+        cfg.dot_shape = "square".to_string();
+    }
+
+    if !wants_dot_only {
+        if lower.contains("tiny") || lower.contains("small") || lower.contains("compact") {
+            cfg.length = 6;
+            cfg.thickness = 2;
+        } else if lower.contains("large") || lower.contains("big") || lower.contains("thick") {
+            cfg.length = 16;
+            cfg.thickness = 3;
+        }
+    }
+
+    if lower.contains("no gap") || lower.contains("zero gap") || lower.contains("tight gap") {
+        cfg.gap = 1;
+    } else if lower.contains("wide gap") {
+        cfg.gap = 9;
+    }
+
     if lower.contains("circle") || lower.contains("ring") || lower.contains("shotgun") {
         cfg.has_circle = true;
-        if lower.contains("large") || lower.contains("wide") {
+        cfg.dot = true;
+        if lower.contains("shotgun") || lower.contains("large") || lower.contains("wide") {
             cfg.circle_radius = 28;
         }
+    }
+    if lower.contains("shotgun") && !lower.contains("bars") {
+        cfg.hide_bars = true;
     }
 
     if lower.contains("thin border") || lower.contains("thin outline") {
@@ -1123,7 +1236,7 @@ pub fn synthesize_crosshair_from_prompt(
     if lower.contains("glow") || lower.contains("blur") || lower.contains("soft") {
         cfg.blur = 2;
     }
-    if lower.contains("dynamic") || lower.contains("spread") {
+    if lower.contains("dynamic") || lower.contains("spread") || lower.contains("smg") {
         cfg.dynamic_spread = true;
         cfg.spread_amount = 16;
     }
@@ -1300,71 +1413,867 @@ fn local_help_reply(prompt: &str) -> String {
     } else if lower.contains("vault") || lower.contains("account") || lower.contains("privacy") || lower.contains("offline") {
         "Everything in Luair runs 100% locally with zero API keys or cloud servers. Your local account is protected in embedded SQLite with Argon2id password hashing and AES-256-GCM encryption.".to_string()
     } else {
-        "I'm ready locally! Download Luair Candle (475 MB) above for full local conversational reasoning, or ask me right now to create a crosshair (e.g. \"Make a clean lime green CS2 dot with a thin border and bind it to key 2\"), design a theme, or toggle OBS Shield.".to_string()
+        "I'm ready locally! Ask me to create a new preset (e.g. \"Create a preset called Sniper with a crimson dot on key 5\"), put a crosshair on an existing preset (\"Put a cyan T-shape crosshair on preset 2\"), generate a multi-preset pack, design a theme, or toggle OBS Shield.".to_string()
     }
 }
 
-fn apply_generated_crosshair(
-    app: &AppHandle,
-    app_state: &AppState,
-    new_cfg: CrosshairConfig,
-    bound_hotkey: Option<String>,
-    target_slot_id: Option<String>,
-) -> Result<LuairState, String> {
-    let next_state = {
-        let mut guard = app_state.state.lock().map_err(|e| e.to_string())?;
-        guard.crosshair = new_cfg.clone();
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PackPresetSpec {
+    name: String,
+    style_prompt: String,
+}
 
-        if let Some(slot_id) = target_slot_id {
-            if let Some(p) = guard.profiles.iter_mut().find(|p| p.id == slot_id) {
-                p.config = new_cfg.clone();
-                if let Some(ref hk) = bound_hotkey {
-                    p.hotkey = Some(hk.clone());
-                }
-                guard.active_profile_id = Some(p.id.clone());
-            }
-        } else if let Some(ref hk) = bound_hotkey {
-            let hk_upper = hk.to_ascii_uppercase();
-            if let Some(existing) = guard
-                .profiles
-                .iter_mut()
-                .find(|p| p.hotkey.as_deref().map(|k| k.to_ascii_uppercase()) == Some(hk_upper.clone()))
-            {
-                existing.config = new_cfg.clone();
-                guard.active_profile_id = Some(existing.id.clone());
-            } else if let Some(slot_idx) = hk.parse::<usize>().ok().filter(|&n| n >= 1 && n <= guard.profiles.len()) {
-                let p = &mut guard.profiles[slot_idx - 1];
-                p.config = new_cfg.clone();
-                p.hotkey = Some(hk.clone());
-                guard.active_profile_id = Some(p.id.clone());
-            } else if guard.profiles.len() < 10 {
-                let id = format!("ai-slot-{}", guard.profiles.len() + 1);
-                guard.profiles.push(CrosshairProfile {
-                    id: id.clone(),
-                    name: format!("AI ({hk})"),
-                    hotkey: Some(hk.clone()),
-                    config: new_cfg.clone(),
-                });
-                guard.active_profile_id = Some(id);
-            } else if let Some(active_id) = guard.active_profile_id.clone() {
-                if let Some(p) = guard.profiles.iter_mut().find(|p| p.id == active_id) {
-                    p.config = new_cfg.clone();
-                    p.hotkey = Some(hk.clone());
-                }
-            }
-        } else if let Some(active_id) = guard.active_profile_id.clone() {
-            if let Some(p) = guard.profiles.iter_mut().find(|p| p.id == active_id) {
-                p.config = new_cfg.clone();
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PresetAction {
+    SwitchTo {
+        index_1based: Option<usize>,
+        name_query: Option<String>,
+        hotkey_query: Option<String>,
+    },
+    RenameSlot {
+        index_1based: Option<usize>,
+        name_query: Option<String>,
+        new_name: String,
+    },
+    DeleteSlot {
+        index_1based: Option<usize>,
+        name_query: Option<String>,
+    },
+    CreatePack {
+        items: Vec<PackPresetSpec>,
+        update_existing: bool,
+    },
+    CreateNew {
+        name: Option<String>,
+        hotkey: Option<String>,
+        use_current_crosshair: bool,
+    },
+    UpdateSlotIndex {
+        index_1based: usize,
+        new_name: Option<String>,
+        hotkey: Option<String>,
+    },
+    UpdateSlotByName {
+        slot_id: String,
+        new_name: Option<String>,
+        hotkey: Option<String>,
+    },
+    DefaultTarget,
+}
+
+fn clean_extracted_name(raw: &str) -> Option<String> {
+    let mut s = raw.trim().trim_matches(|c| matches!(c, '"' | '\'' | '`'));
+    for prefix in ["a ", "an ", "the ", "my ", "new ", "preset ", "profile ", "slot "] {
+        if s.len() > prefix.len() && s[..prefix.len()].eq_ignore_ascii_case(prefix) {
+            s = s[prefix.len()..].trim();
+        }
+    }
+    let lower = s.to_ascii_lowercase();
+    let stop_markers = [
+        " with ",
+        " using ",
+        " having ",
+        " on key",
+        " on slot",
+        " on preset",
+        " on profile",
+        " on 1",
+        " on 2",
+        " on 3",
+        " on 4",
+        " on 5",
+        " on 6",
+        " on 7",
+        " on 8",
+        " on 9",
+        " on mouse",
+        " bound ",
+        " bind ",
+        " hotkey ",
+        " that ",
+        " and ",
+        ",",
+        ".",
+        "!",
+        "?",
+        "\n",
+    ];
+    let mut cutoff = s.len();
+    for marker in stop_markers {
+        if let Some(pos) = lower.find(marker) {
+            if pos < cutoff {
+                cutoff = pos;
             }
         }
+    }
+    let candidate = s[..cutoff]
+        .trim()
+        .trim_matches(|c| matches!(c, '"' | '\'' | '`' | ':' | '-'))
+        .trim();
+    if candidate.is_empty() || candidate.len() > 36 {
+        return None;
+    }
+    let lower_cand = candidate.to_ascii_lowercase();
+    if matches!(
+        lower_cand.as_str(),
+        "preset" | "profile" | "slot" | "crosshair" | "new preset" | "new profile" | "new slot"
+    ) {
+        return None;
+    }
+    Some(candidate.to_string())
+}
 
-        guard.clone()
+pub fn extract_preset_name(prompt: &str) -> Option<String> {
+    for quote in ['"', '\''] {
+        if let Some(start) = prompt.find(quote) {
+            let rest = &prompt[start + 1..];
+            if let Some(end) = rest.find(quote) {
+                let inner = rest[..end].trim();
+                if !inner.is_empty() && inner.len() <= 36 {
+                    return Some(inner.to_string());
+                }
+            }
+        }
+    }
+
+    let lower = prompt.to_ascii_lowercase();
+    for marker in [
+        "called ",
+        "named ",
+        "titled ",
+        "preset for ",
+        "profile for ",
+        "slot for ",
+    ] {
+        if let Some(pos) = lower.find(marker) {
+            let after = &prompt[pos + marker.len()..];
+            if let Some(cleaned) = clean_extracted_name(after) {
+                return Some(cleaned);
+            }
+        }
+    }
+
+    if let Some(pos) = lower.find("as ") {
+        let after = &prompt[pos + 3..];
+        let trimmed_lower = after.trim().to_ascii_lowercase();
+        if !trimmed_lower.starts_with("a new preset")
+            && !trimmed_lower.starts_with("new preset")
+            && !trimmed_lower.starts_with("preset")
+        {
+            if let Some(cleaned) = clean_extracted_name(after) {
+                return Some(cleaned);
+            }
+        }
+    }
+
+    None
+}
+
+fn find_slot_index_in_prompt(prompt: &str) -> Option<usize> {
+    let lower = prompt.to_ascii_lowercase();
+    let tokens: Vec<&str> = lower
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .collect();
+
+    for (idx, &tok) in tokens.iter().enumerate() {
+        if matches!(tok, "preset" | "profile" | "slot") {
+            if let Some(&next) = tokens.get(idx + 1) {
+                let mut parsed = next.parse::<usize>().ok();
+                if parsed.is_none() && next == "number" {
+                    parsed = tokens.get(idx + 2).and_then(|t| t.parse::<usize>().ok());
+                }
+                if let Some(n) = parsed.filter(|&n| (1..=10).contains(&n)) {
+                    return Some(n);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn find_matching_profile_index(profiles: &[CrosshairProfile], prompt: &str) -> Option<usize> {
+    let lower = prompt.to_ascii_lowercase();
+    for (idx, profile) in profiles.iter().enumerate() {
+        let full_name = profile.name.trim().to_ascii_lowercase();
+        if !full_name.is_empty() && lower.contains(&full_name) {
+            return Some(idx);
+        }
+        let words: Vec<&str> = full_name
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| w.len() >= 4)
+            .collect();
+        for word in words {
+            if matches!(
+                word,
+                "precision" | "dynamic" | "tactical" | "quarters" | "close" | "custom" | "preset"
+            ) {
+                continue;
+            }
+            if lower.contains(&format!("on {word}"))
+                || lower.contains(&format!("on my {word}"))
+                || lower.contains(&format!("on the {word}"))
+                || lower.contains(&format!("for {word}"))
+                || lower.contains(&format!("to {word}"))
+                || lower.contains(&format!("{word} preset"))
+                || lower.contains(&format!("{word} slot"))
+            {
+                return Some(idx);
+            }
+        }
+    }
+    None
+}
+
+fn build_pack_items(prompt: &str) -> Vec<PackPresetSpec> {
+    let lower = prompt.to_ascii_lowercase();
+    let base_color = detect_named_color(&lower).map(|(_, lbl)| lbl);
+
+    let catalog: &[(&[&str], &str, &str)] = &[
+        (
+            &["rifle", "vandal", "phantom", "ak"],
+            "Rifle",
+            "cyan rifle crosshair with thin border",
+        ),
+        (
+            &["pistol", "sheriff", "deagle", "sidearm"],
+            "Pistol",
+            "lime green precision pistol dot with thin border",
+        ),
+        (
+            &["shotgun", "pump", "close quarters"],
+            "Shotgun",
+            "amber gold shotgun circle ring with center dot and dynamic spread",
+        ),
+        (
+            &["sniper", "awp", "operator", "scout"],
+            "Sniper",
+            "crimson sniper precision dot with thin border",
+        ),
+        (
+            &["smg", "submachine"],
+            "SMG",
+            "electric blue dynamic spread crosshair with dot",
+        ),
+        (
+            &["valorant"],
+            "Valorant",
+            "cyan valorant tactical crosshair with thin border",
+        ),
+        (
+            &["cs2", "counter"],
+            "CS2",
+            "lime green cs2 dot with thin border",
+        ),
+        (
+            &["t-shape", "t shape", "tactical"],
+            "Tactical T-Shape",
+            "cyan gradient t-shape crosshair",
+        ),
+    ];
+
+    let mut items = Vec::new();
+    for (keywords, title, default_style) in catalog {
+        if keywords.iter().any(|kw| lower.contains(kw)) {
+            let style_prompt = match base_color {
+                Some(color_name) => format!("{color_name} {default_style}"),
+                None => default_style.to_string(),
+            };
+            items.push(PackPresetSpec {
+                name: (*title).to_string(),
+                style_prompt,
+            });
+        }
+    }
+
+    if items.is_empty() {
+        let color_prefix = base_color.unwrap_or("Lime Green");
+        items = vec![
+            PackPresetSpec {
+                name: "Rifle".to_string(),
+                style_prompt: format!("{color_prefix} rifle crosshair with thin border"),
+            },
+            PackPresetSpec {
+                name: "Precision Dot".to_string(),
+                style_prompt: "Cyan precision dot with thin border".to_string(),
+            },
+            PackPresetSpec {
+                name: "Shotgun Ring".to_string(),
+                style_prompt: "Gold shotgun circle ring with dot and dynamic spread".to_string(),
+            },
+        ];
+    }
+
+    items
+}
+
+fn parse_preset_action(prompt: &str, profiles: &[CrosshairProfile]) -> PresetAction {
+    let lower = prompt.to_ascii_lowercase();
+    let idx_1based = find_slot_index_in_prompt(prompt);
+    let matched_profile_idx = find_matching_profile_index(profiles, prompt);
+
+    if lower.contains("rename ") && (lower.contains("preset") || lower.contains("profile") || lower.contains("slot") || matched_profile_idx.is_some()) {
+        if let Some(to_pos) = lower.rfind(" to ") {
+            let after_to = prompt[to_pos + 4..]
+                .trim()
+                .trim_matches(|c| matches!(c, '"' | '\'' | '.' | '!' | '?'))
+                .trim();
+            if !after_to.is_empty() && after_to.len() <= 36 {
+                return PresetAction::RenameSlot {
+                    index_1based: idx_1based,
+                    name_query: matched_profile_idx.map(|i| profiles[i].id.clone()),
+                    new_name: after_to.to_string(),
+                };
+            }
+        }
+    }
+
+    if (lower.starts_with("delete ")
+        || lower.starts_with("remove ")
+        || lower.contains("delete preset")
+        || lower.contains("remove preset")
+        || lower.contains("delete slot")
+        || lower.contains("remove slot"))
+        && (idx_1based.is_some() || matched_profile_idx.is_some())
+    {
+        return PresetAction::DeleteSlot {
+            index_1based: idx_1based,
+            name_query: matched_profile_idx.map(|i| profiles[i].id.clone()),
+        };
+    }
+
+    let has_style_words = lower.contains("with ")
+        || lower.contains("dot")
+        || lower.contains("crosshair")
+        || lower.contains("reticle")
+        || lower.contains("t-shape")
+        || lower.contains("circle")
+        || lower.contains("make ")
+        || lower.contains("create ")
+        || lower.contains("put ");
+
+    let is_switch_intent = !has_style_words
+        && (lower.starts_with("switch ")
+            || lower.starts_with("load ")
+            || lower.starts_with("equip ")
+            || lower.starts_with("select ")
+            || lower.contains("switch to preset")
+            || lower.contains("switch to slot")
+            || lower.contains("load preset")
+            || lower.contains("equip preset"));
+
+    if is_switch_intent && (idx_1based.is_some() || matched_profile_idx.is_some()) {
+        return PresetAction::SwitchTo {
+            index_1based: idx_1based,
+            name_query: matched_profile_idx.map(|i| profiles[i].id.clone()),
+            hotkey_query: detect_requested_hotkey(prompt),
+        };
+    }
+
+    let mentions_plural_presets = lower.contains("presets")
+        || lower.contains("profiles")
+        || lower.contains("slots");
+
+    if mentions_plural_presets
+        && (lower.contains("make")
+            || lower.contains("create")
+            || lower.contains("add")
+            || lower.contains("build")
+            || lower.contains("generate")
+            || lower.contains("put")
+            || lower.contains("populate")
+            || lower.contains("fill")
+            || lower.contains("give"))
+    {
+        let update_existing = (lower.contains("all my presets")
+            || lower.contains("my presets")
+            || lower.contains("existing presets")
+            || lower.contains("all presets"))
+            && !lower.contains("new ");
+        return PresetAction::CreatePack {
+            items: build_pack_items(prompt),
+            update_existing,
+        };
+    }
+
+    if lower.contains("save")
+        && (lower.contains("current") || lower.contains("this"))
+        && (lower.contains("preset") || lower.contains("profile") || lower.contains("slot"))
+    {
+        return PresetAction::CreateNew {
+            name: extract_preset_name(prompt),
+            hotkey: detect_requested_hotkey(prompt),
+            use_current_crosshair: true,
+        };
+    }
+
+    if let Some(n) = idx_1based {
+        return PresetAction::UpdateSlotIndex {
+            index_1based: n,
+            new_name: extract_preset_name(prompt),
+            hotkey: detect_requested_hotkey(prompt),
+        };
+    }
+
+    if !lower.contains("new preset") && !lower.contains("new profile") && !lower.contains("new slot") {
+        if let Some(idx) = matched_profile_idx {
+            let targets_existing = lower.contains(&format!("on {}", profiles[idx].name.to_ascii_lowercase()))
+                || lower.contains("on ")
+                || lower.contains("update ")
+                || lower.contains("for ");
+            if targets_existing {
+                return PresetAction::UpdateSlotByName {
+                    slot_id: profiles[idx].id.clone(),
+                    new_name: extract_preset_name(prompt),
+                    hotkey: detect_requested_hotkey(prompt),
+                };
+            }
+        }
+    }
+
+    let wants_new_preset = lower.contains("new preset")
+        || lower.contains("new profile")
+        || lower.contains("new slot")
+        || ((lower.contains("make")
+            || lower.contains("create")
+            || lower.contains("add")
+            || lower.contains("build")
+            || lower.contains("generate")
+            || lower.contains("save"))
+            && (lower.contains("preset") || lower.contains("profile") || lower.contains("slot")));
+
+    if wants_new_preset {
+        return PresetAction::CreateNew {
+            name: extract_preset_name(prompt),
+            hotkey: detect_requested_hotkey(prompt),
+            use_current_crosshair: false,
+        };
+    }
+
+    PresetAction::DefaultTarget
+}
+
+fn smart_preset_name(prompt: &str, cfg: &CrosshairConfig, explicit: Option<String>) -> String {
+    if let Some(name) = explicit {
+        return name;
+    }
+    let lower = prompt.to_ascii_lowercase();
+    if lower.contains("sniper") || lower.contains("awp") {
+        return "Sniper".to_string();
+    }
+    if lower.contains("shotgun") {
+        return "Shotgun".to_string();
+    }
+    if lower.contains("valorant") {
+        return "Valorant".to_string();
+    }
+    if lower.contains("pistol") || lower.contains("sheriff") {
+        return "Pistol".to_string();
+    }
+    let color_label = detect_named_color(&lower).map(|(_, n)| n).unwrap_or("Custom");
+    let shape_label = if cfg.hide_bars {
+        if cfg.has_circle {
+            "Circle"
+        } else {
+            "Dot"
+        }
+    } else if cfg.t_shape {
+        "T-Shape"
+    } else {
+        "Crosshair"
+    };
+    format!("{color_label} {shape_label}")
+}
+
+fn next_available_digit_hotkey(profiles: &[CrosshairProfile]) -> Option<String> {
+    for digit in 1..=9 {
+        let key = digit.to_string();
+        let taken = profiles
+            .iter()
+            .any(|p| p.hotkey.as_deref().map(|k| k.eq_ignore_ascii_case(&key)) == Some(true));
+        if !taken {
+            return Some(key);
+        }
+    }
+    None
+}
+
+fn next_unique_ai_slot_id(profiles: &[CrosshairProfile]) -> String {
+    let mut n = profiles.len() + 1;
+    loop {
+        let candidate = format!("ai-slot-{n}");
+        if !profiles.iter().any(|p| p.id == candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+pub fn apply_preset_or_crosshair_to_state(
+    state: &mut LuairState,
+    prompt: &str,
+    llm_json: Option<&serde_json::Value>,
+    target_slot_id: Option<&str>,
+) -> Result<(String, Option<String>), String> {
+    let action = parse_preset_action(prompt, &state.profiles);
+
+    match action {
+        PresetAction::SwitchTo {
+            index_1based,
+            name_query,
+            hotkey_query,
+        } => {
+            let found_idx = index_1based
+                .and_then(|n| n.checked_sub(1))
+                .filter(|&i| i < state.profiles.len())
+                .or_else(|| {
+                    name_query.and_then(|id| state.profiles.iter().position(|p| p.id == id))
+                })
+                .or_else(|| {
+                    hotkey_query.and_then(|hk| {
+                        state.profiles.iter().position(|p| {
+                            p.hotkey.as_deref().is_some_and(|k| k.eq_ignore_ascii_case(&hk))
+                        })
+                    })
+                });
+            let Some(idx) = found_idx else {
+                return Err("Could not find that preset slot.".to_string());
+            };
+            let chosen = state.profiles[idx].clone();
+            state.crosshair = chosen.config.clone();
+            state.active_profile_id = Some(chosen.id.clone());
+            let hk_note = chosen
+                .hotkey
+                .as_deref()
+                .map(|k| format!(" [{k}]"))
+                .unwrap_or_default();
+            Ok((
+                format!("Switched to preset #{} \"{}\"{hk_note}.", idx + 1, chosen.name),
+                chosen.hotkey,
+            ))
+        }
+
+        PresetAction::RenameSlot {
+            index_1based,
+            name_query,
+            new_name,
+        } => {
+            let found_idx = index_1based
+                .and_then(|n| n.checked_sub(1))
+                .filter(|&i| i < state.profiles.len())
+                .or_else(|| {
+                    name_query.and_then(|id| state.profiles.iter().position(|p| p.id == id))
+                })
+                .or_else(|| {
+                    state.active_profile_id.as_deref().and_then(|id| {
+                        state.profiles.iter().position(|p| p.id == id)
+                    })
+                });
+            let Some(idx) = found_idx else {
+                return Err("Could not find that preset slot to rename.".to_string());
+            };
+            let old_name = state.profiles[idx].name.clone();
+            state.profiles[idx].name = new_name.clone();
+            state.active_profile_id = Some(state.profiles[idx].id.clone());
+            let hk = state.profiles[idx].hotkey.clone();
+            Ok((
+                format!("Renamed preset #{} \"{old_name}\" to \"{new_name}\".", idx + 1),
+                hk,
+            ))
+        }
+
+        PresetAction::DeleteSlot {
+            index_1based,
+            name_query,
+        } => {
+            if state.profiles.len() <= 1 {
+                return Err("Cannot delete the last remaining preset slot.".to_string());
+            }
+            let found_idx = index_1based
+                .and_then(|n| n.checked_sub(1))
+                .filter(|&i| i < state.profiles.len())
+                .or_else(|| {
+                    name_query.and_then(|id| state.profiles.iter().position(|p| p.id == id))
+                });
+            let Some(idx) = found_idx else {
+                return Err("Could not find that preset slot to delete.".to_string());
+            };
+            let removed = state.profiles.remove(idx);
+            if state.active_profile_id.as_deref() == Some(removed.id.as_str()) {
+                if let Some(first) = state.profiles.first() {
+                    state.active_profile_id = Some(first.id.clone());
+                    state.crosshair = first.config.clone();
+                }
+            }
+            Ok((
+                format!("Deleted preset #{} \"{}\".", idx + 1, removed.name),
+                None,
+            ))
+        }
+
+        PresetAction::CreatePack {
+            items,
+            update_existing,
+        } => {
+            let mut summary_parts = Vec::new();
+            if update_existing && !state.profiles.is_empty() {
+                for (idx, profile) in state.profiles.iter_mut().enumerate() {
+                    let style = &items[idx % items.len()].style_prompt;
+                    let (cfg, _, _) =
+                        synthesize_crosshair_from_prompt(&CrosshairConfig::default(), style, None);
+                    profile.config = cfg;
+                    summary_parts.push(format!("#{} \"{}\"", idx + 1, profile.name));
+                }
+                if let Some(first) = state.profiles.first() {
+                    state.crosshair = first.config.clone();
+                    state.active_profile_id = Some(first.id.clone());
+                }
+                return Ok((
+                    format!(
+                        "Updated crosshairs on {} presets ({}).",
+                        summary_parts.len(),
+                        summary_parts.join(", ")
+                    ),
+                    None,
+                ));
+            }
+
+            if state.profiles.len() >= 10 {
+                return Err(
+                    "All 10 preset slots are full — delete a slot or ask me to put a crosshair on preset 1..10."
+                        .to_string(),
+                );
+            }
+            let mut first_new: Option<(String, CrosshairConfig, Option<String>)> = None;
+            for item in items {
+                if state.profiles.len() >= 10 {
+                    break;
+                }
+                let (cfg, _, _) = synthesize_crosshair_from_prompt(
+                    &CrosshairConfig::default(),
+                    &item.style_prompt,
+                    llm_json,
+                );
+                let id = next_unique_ai_slot_id(&state.profiles);
+                let hk = next_available_digit_hotkey(&state.profiles);
+                let slot_num = state.profiles.len() + 1;
+                state.profiles.push(CrosshairProfile {
+                    id: id.clone(),
+                    name: item.name.clone(),
+                    hotkey: hk.clone(),
+                    config: cfg.clone(),
+                });
+                let hk_text = hk.as_deref().map(|k| format!(" [{k}]")).unwrap_or_default();
+                summary_parts.push(format!("#{slot_num} \"{}\"{hk_text}", item.name));
+                if first_new.is_none() {
+                    first_new = Some((id, cfg, hk));
+                }
+            }
+            if let Some((id, cfg, hk)) = first_new {
+                state.crosshair = cfg;
+                state.active_profile_id = Some(id);
+                return Ok((
+                    format!(
+                        "Created {} presets ({}).",
+                        summary_parts.len(),
+                        summary_parts.join(", ")
+                    ),
+                    hk,
+                ));
+            }
+            Err("No preset slots were created.".to_string())
+        }
+
+        PresetAction::CreateNew {
+            name,
+            hotkey,
+            use_current_crosshair,
+        } => {
+            if state.profiles.len() >= 10 {
+                return Err(
+                    "All 10 preset slots are full — delete a slot or ask me to put a crosshair on preset 1..10."
+                        .to_string(),
+                );
+            }
+            let (cfg, extracted_hk) = if use_current_crosshair {
+                (state.crosshair.clone(), hotkey.or_else(|| detect_requested_hotkey(prompt)))
+            } else {
+                let (cfg, hk, _) =
+                    synthesize_crosshair_from_prompt(&CrosshairConfig::default(), prompt, llm_json);
+                (cfg, hotkey.or(hk))
+            };
+            let final_name = smart_preset_name(prompt, &cfg, name);
+            let final_hotkey = extracted_hk.or_else(|| next_available_digit_hotkey(&state.profiles));
+            let id = next_unique_ai_slot_id(&state.profiles);
+            let slot_num = state.profiles.len() + 1;
+            state.profiles.push(CrosshairProfile {
+                id: id.clone(),
+                name: final_name.clone(),
+                hotkey: final_hotkey.clone(),
+                config: cfg.clone(),
+            });
+            state.crosshair = cfg.clone();
+            state.active_profile_id = Some(id);
+            let hk_text = final_hotkey
+                .as_deref()
+                .map(|k| format!(" on [{k}]"))
+                .unwrap_or_default();
+            Ok((
+                format!(
+                    "Created preset #{slot_num} \"{final_name}\"{hk_text} ({}).",
+                    cfg.color
+                ),
+                final_hotkey,
+            ))
+        }
+
+        PresetAction::UpdateSlotIndex {
+            index_1based,
+            new_name,
+            hotkey,
+        } => {
+            let idx = index_1based.saturating_sub(1);
+            if idx >= state.profiles.len() {
+                return Err(format!(
+                    "Preset #{index_1based} does not exist yet (you have {} presets). Ask me to create a new preset instead!",
+                    state.profiles.len()
+                ));
+            }
+            let (cfg, extracted_hk, _) =
+                synthesize_crosshair_from_prompt(&CrosshairConfig::default(), prompt, llm_json);
+            let final_hk = hotkey.or(extracted_hk);
+            let slot = &mut state.profiles[idx];
+            slot.config = cfg.clone();
+            if let Some(name) = new_name {
+                slot.name = name;
+            }
+            if let Some(ref hk) = final_hk {
+                slot.hotkey = Some(hk.clone());
+            }
+            let slot_name = slot.name.clone();
+            let slot_hk = slot.hotkey.clone();
+            let slot_id = slot.id.clone();
+            state.crosshair = cfg.clone();
+            state.active_profile_id = Some(slot_id);
+            let hk_text = slot_hk
+                .as_deref()
+                .map(|k| format!(" [{k}]"))
+                .unwrap_or_default();
+            Ok((
+                format!(
+                    "Updated preset #{index_1based} \"{slot_name}\"{hk_text} with {} crosshair.",
+                    cfg.color
+                ),
+                slot_hk,
+            ))
+        }
+
+        PresetAction::UpdateSlotByName {
+            slot_id,
+            new_name,
+            hotkey,
+        } => {
+            let Some(idx) = state.profiles.iter().position(|p| p.id == slot_id) else {
+                return Err("Could not find that preset slot.".to_string());
+            };
+            let (cfg, extracted_hk, _) =
+                synthesize_crosshair_from_prompt(&CrosshairConfig::default(), prompt, llm_json);
+            let final_hk = hotkey.or(extracted_hk);
+            let slot = &mut state.profiles[idx];
+            slot.config = cfg.clone();
+            if let Some(name) = new_name {
+                slot.name = name;
+            }
+            if let Some(ref hk) = final_hk {
+                slot.hotkey = Some(hk.clone());
+            }
+            let slot_name = slot.name.clone();
+            let slot_hk = slot.hotkey.clone();
+            state.crosshair = cfg.clone();
+            state.active_profile_id = Some(slot.id.clone());
+            Ok((
+                format!(
+                    "Updated preset #{} \"{slot_name}\" with {} crosshair.",
+                    idx + 1,
+                    cfg.color
+                ),
+                slot_hk,
+            ))
+        }
+
+        PresetAction::DefaultTarget => {
+            let (new_cfg, bound_hotkey, summary) =
+                synthesize_crosshair_from_prompt(&state.crosshair, prompt, llm_json);
+            state.crosshair = new_cfg.clone();
+
+            if let Some(slot_id) = target_slot_id {
+                if let Some(p) = state.profiles.iter_mut().find(|p| p.id == slot_id) {
+                    p.config = new_cfg.clone();
+                    if let Some(ref hk) = bound_hotkey {
+                        p.hotkey = Some(hk.clone());
+                    }
+                    state.active_profile_id = Some(p.id.clone());
+                }
+            } else if let Some(ref hk) = bound_hotkey {
+                let hk_upper = hk.to_ascii_uppercase();
+                if let Some(existing) = state.profiles.iter_mut().find(|p| {
+                    p.hotkey.as_deref().map(|k| k.to_ascii_uppercase()) == Some(hk_upper.clone())
+                }) {
+                    existing.config = new_cfg.clone();
+                    state.active_profile_id = Some(existing.id.clone());
+                } else if let Some(slot_idx) = hk
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|&n| n >= 1 && n <= state.profiles.len())
+                {
+                    let p = &mut state.profiles[slot_idx - 1];
+                    p.config = new_cfg.clone();
+                    p.hotkey = Some(hk.clone());
+                    state.active_profile_id = Some(p.id.clone());
+                } else if state.profiles.len() < 10 {
+                    let id = next_unique_ai_slot_id(&state.profiles);
+                    state.profiles.push(CrosshairProfile {
+                        id: id.clone(),
+                        name: smart_preset_name(prompt, &new_cfg, extract_preset_name(prompt)),
+                        hotkey: Some(hk.clone()),
+                        config: new_cfg,
+                    });
+                    state.active_profile_id = Some(id);
+                } else if let Some(active_id) = state.active_profile_id.clone() {
+                    if let Some(p) = state.profiles.iter_mut().find(|p| p.id == active_id) {
+                        p.config = new_cfg;
+                        p.hotkey = Some(hk.clone());
+                    }
+                }
+            } else if let Some(active_id) = state.active_profile_id.clone() {
+                if let Some(p) = state.profiles.iter_mut().find(|p| p.id == active_id) {
+                    p.config = new_cfg;
+                }
+            }
+
+            Ok((summary, bound_hotkey))
+        }
+    }
+}
+
+fn apply_generated_preset_or_crosshair(
+    app: &AppHandle,
+    app_state: &AppState,
+    prompt: &str,
+    llm_json: Option<&serde_json::Value>,
+    target_slot_id: Option<&str>,
+) -> Result<(String, Option<String>, LuairState), String> {
+    let (next_state, summary, bound_hotkey) = {
+        let mut guard = app_state.state.lock().map_err(|e| e.to_string())?;
+        let (summary, bound_hotkey) =
+            apply_preset_or_crosshair_to_state(&mut guard, prompt, llm_json, target_slot_id)?;
+        (guard.clone(), summary, bound_hotkey)
     };
 
     app_state.sync_hotkeys(&next_state);
     storage::save_to_disk(app, &next_state)?;
     let _ = app.emit("luair://state-updated", &next_state);
-    Ok(next_state)
+    Ok((summary, bound_hotkey, next_state))
 }
 
 #[tauri::command]
@@ -1513,6 +2422,9 @@ pub fn delete_ai_model(
     Ok(app_state.ai.status())
 }
 
+const CROSSHAIR_JSON_SYSTEM_PROMPT: &str = "You convert user crosshair requests into ONE valid JSON object with any relevant keys from: color (hex), outline (bool), outlineThickness (0-8), outlineColor (hex), length (0-60), thickness (1-24), gap (0-60), dot (bool), dotSize (1-20), dotShape (circle|square), hideBars (bool), tShape (bool), hasCircle (bool), circleRadius (1-200), opacity (0.1-1.0), blur (0-20), colorMode (solid|gradient|rainbow), gradientColor (hex), dynamicSpread (bool), recoilColorEnabled (bool), recoilColor (hex), hotkey (string). Output JSON only.";
+const THEME_JSON_SYSTEM_PROMPT: &str = "You convert user UI theme requests into ONE valid JSON object with keys: name, surfaceMode (liquid-glass|solid-minimal), background (hex), surface (hex), text (hex), mutedText (hex), accent (hex), highlight (hex), blurPx (0-36), glassOpacity (0.35-1.0), borderRefraction (0-100), dynamicLighting (bool), cornerRadius (0-24). Output JSON only.";
+
 #[tauri::command]
 pub async fn ai_make_crosshair(
     app: AppHandle,
@@ -1520,13 +2432,11 @@ pub async fn ai_make_crosshair(
     prompt: String,
     target_slot_id: Option<String>,
 ) -> Result<AiApplyResult, String> {
-    let base_cfg = app_state.snapshot().crosshair;
     let ai = app_state.ai.clone();
     let prompt_clone = prompt.clone();
 
     let (raw_llm, engine_used) = tauri::async_runtime::spawn_blocking(move || {
-        let sys = "You convert user crosshair requests into ONE valid JSON object with any relevant keys from: color (hex), outline (bool), outlineThickness (0-8), outlineColor (hex), length (0-60), thickness (1-24), gap (0-60), dot (bool), dotSize (1-20), dotShape (circle|square), hideBars (bool), tShape (bool), hasCircle (bool), circleRadius (1-200), opacity (0.1-1.0), blur (0-20), colorMode (solid|gradient|rainbow), gradientColor (hex), dynamicSpread (bool), recoilColorEnabled (bool), recoilColor (hex), hotkey (string). Output JSON only.";
-        match ai.try_generate(sys, &[], &prompt_clone, 180, 0.2) {
+        match ai.try_generate(CROSSHAIR_JSON_SYSTEM_PROMPT, &[], &prompt_clone, 180, 0.2) {
             Some((text, engine)) => (Some(text), engine),
             None => (None, "Offline Intent Engine".to_string()),
         }
@@ -1535,11 +2445,13 @@ pub async fn ai_make_crosshair(
     .map_err(|e| format!("AI generation task error: {e}"))?;
 
     let llm_json = raw_llm.as_deref().and_then(extract_json_object);
-    let (new_cfg, bound_hotkey, summary) =
-        synthesize_crosshair_from_prompt(&base_cfg, &prompt, llm_json.as_ref());
-
-    let next_state =
-        apply_generated_crosshair(&app, &app_state, new_cfg, bound_hotkey.clone(), target_slot_id)?;
+    let (summary, bound_hotkey, next_state) = apply_generated_preset_or_crosshair(
+        &app,
+        &app_state,
+        &prompt,
+        llm_json.as_ref(),
+        target_slot_id.as_deref(),
+    )?;
 
     Ok(AiApplyResult {
         summary,
@@ -1560,8 +2472,7 @@ pub async fn ai_make_theme(
     let prompt_clone = prompt.clone();
 
     let (raw_llm, engine_used) = tauri::async_runtime::spawn_blocking(move || {
-        let sys = "You convert user UI theme requests into ONE valid JSON object with keys: name, surfaceMode (liquid-glass|solid-minimal), background (hex), surface (hex), text (hex), mutedText (hex), accent (hex), highlight (hex), blurPx (0-36), glassOpacity (0.35-1.0), borderRefraction (0-100), dynamicLighting (bool), cornerRadius (0-24). Output JSON only.";
-        match ai.try_generate(sys, &[], &prompt_clone, 180, 0.25) {
+        match ai.try_generate(THEME_JSON_SYSTEM_PROMPT, &[], &prompt_clone, 180, 0.25) {
             Some((text, engine)) => (Some(text), engine),
             None => (None, "Offline Intent Engine".to_string()),
         }
@@ -1602,28 +2513,49 @@ pub async fn ai_chat(
     let lower = prompt.to_ascii_lowercase();
     let snapshot = app_state.snapshot();
 
-    // Check if the user asked chat to directly change Luair state.
     let wants_shield_on = (lower.contains("enable") || lower.contains("turn on"))
         && (lower.contains("shield") || lower.contains("cloak") || lower.contains("obs"));
     let wants_shield_off = (lower.contains("disable") || lower.contains("turn off"))
         && (lower.contains("shield") || lower.contains("cloak") || lower.contains("obs"));
-    let wants_crosshair = (lower.contains("make") || lower.contains("create") || lower.contains("set") || lower.contains("switch") || lower.contains("give me"))
-        && (lower.contains("crosshair") || lower.contains("dot") || lower.contains("reticle") || lower.contains("t-shape"));
-    let wants_theme = (lower.contains("make") || lower.contains("create") || lower.contains("change") || lower.contains("set"))
+    let wants_theme = (lower.contains("make")
+        || lower.contains("create")
+        || lower.contains("change")
+        || lower.contains("set")
+        || lower.contains("apply"))
         && (lower.contains("theme") || lower.contains("liquid glass") || lower.contains("glassmorphism"));
+    let wants_preset_or_crosshair = (lower.contains("make")
+        || lower.contains("create")
+        || lower.contains("add")
+        || lower.contains("save")
+        || lower.contains("put")
+        || lower.contains("build")
+        || lower.contains("generate")
+        || lower.contains("set")
+        || lower.contains("apply")
+        || lower.contains("change")
+        || lower.contains("update")
+        || lower.contains("give")
+        || lower.contains("fill")
+        || lower.contains("populate")
+        || lower.contains("switch")
+        || lower.contains("load")
+        || lower.contains("equip")
+        || lower.contains("select")
+        || lower.contains("rename")
+        || lower.contains("delete")
+        || lower.contains("remove"))
+        && (lower.contains("preset")
+            || lower.contains("profile")
+            || lower.contains("slot")
+            || lower.contains("crosshair")
+            || lower.contains("dot")
+            || lower.contains("reticle")
+            || lower.contains("t-shape")
+            || lower.contains("circle")
+            || lower.contains("ring"));
 
     let ai = app_state.ai.clone();
     let prompt_clone = prompt.clone();
-
-    let (llm_reply, engine_used) = tauri::async_runtime::spawn_blocking(move || {
-        let sys = "You are Luair Candle, the built-in offline AI assistant inside Luair, a lightweight Rust + Tauri desktop crosshair overlay. Be concise (2-4 short sentences), accurate, and friendly. Mention OBS Shield (WDA_EXCLUDEFROMCAPTURE), non-blocking global hotkeys, Liquid Glass / Solid themes, and Crosshair Studio accurately.";
-        match ai.try_generate(sys, &messages, &prompt_clone, 140, 0.45) {
-            Some((text, engine)) => (Some(text), engine),
-            None => (None, "Offline Intent Engine".to_string()),
-        }
-    })
-    .await
-    .map_err(|e| format!("AI chat task error: {e}"))?;
 
     if wants_shield_on || wants_shield_off {
         let target = wants_shield_on;
@@ -1641,15 +2573,24 @@ pub async fn ai_chat(
             "Disabled OBS Shield".to_string()
         };
         return Ok(AiChatResponse {
-            reply: llm_reply.unwrap_or_else(|| format!("Done — {action}.")),
-            engine_used,
+            reply: format!("Done — {action}."),
+            engine_used: "Luair Candle Action Engine".to_string(),
             applied_action: Some(action),
             updated_state: Some(next_state),
         });
     }
 
     if wants_theme {
-        let llm_json = llm_reply.as_deref().and_then(extract_json_object);
+        let (raw_llm, engine_used) = tauri::async_runtime::spawn_blocking(move || {
+            match ai.try_generate(THEME_JSON_SYSTEM_PROMPT, &[], &prompt_clone, 160, 0.25) {
+                Some((text, engine)) => (Some(text), engine),
+                None => (None, "Offline Intent Engine".to_string()),
+            }
+        })
+        .await
+        .map_err(|e| format!("AI theme task error: {e}"))?;
+
+        let llm_json = raw_llm.as_deref().and_then(extract_json_object);
         let (new_theme, summary) =
             synthesize_theme_from_prompt(&snapshot.ui.theme, &prompt, llm_json.as_ref());
         let next_state = {
@@ -1662,25 +2603,48 @@ pub async fn ai_chat(
         storage::save_to_disk(&app, &next_state)?;
         let _ = app.emit("luair://state-updated", &next_state);
         return Ok(AiChatResponse {
-            reply: llm_reply.unwrap_or_else(|| summary.clone()),
+            reply: format!("Done — {summary}"),
             engine_used,
             applied_action: Some(summary),
             updated_state: Some(next_state),
         });
     }
 
-    if wants_crosshair {
-        let llm_json = llm_reply.as_deref().and_then(extract_json_object);
-        let (new_cfg, bound_hotkey, summary) =
-            synthesize_crosshair_from_prompt(&snapshot.crosshair, &prompt, llm_json.as_ref());
-        let next_state = apply_generated_crosshair(&app, &app_state, new_cfg, bound_hotkey, None)?;
+    if wants_preset_or_crosshair {
+        let (raw_llm, engine_used) = tauri::async_runtime::spawn_blocking(move || {
+            match ai.try_generate(CROSSHAIR_JSON_SYSTEM_PROMPT, &[], &prompt_clone, 160, 0.2) {
+                Some((text, engine)) => (Some(text), engine),
+                None => (None, "Offline Intent Engine".to_string()),
+            }
+        })
+        .await
+        .map_err(|e| format!("AI preset/crosshair task error: {e}"))?;
+
+        let llm_json = raw_llm.as_deref().and_then(extract_json_object);
+        let (summary, _bound_hotkey, next_state) = apply_generated_preset_or_crosshair(
+            &app,
+            &app_state,
+            &prompt,
+            llm_json.as_ref(),
+            None,
+        )?;
         return Ok(AiChatResponse {
-            reply: llm_reply.unwrap_or_else(|| summary.clone()),
+            reply: format!("Done — {summary}"),
             engine_used,
             applied_action: Some(summary),
             updated_state: Some(next_state),
         });
     }
+
+    let (llm_reply, engine_used) = tauri::async_runtime::spawn_blocking(move || {
+        let sys = "You are Luair Candle, the built-in offline AI assistant inside Luair, a Rust + Tauri desktop crosshair overlay. Be concise (2-4 short sentences), accurate, and friendly. You can create/edit/switch/rename/delete crosshair presets, generate custom crosshairs and Liquid Glass/Solid themes, and toggle OBS Shield (WDA_EXCLUDEFROMCAPTURE). Support email: luairsupport@gmail.com.";
+        match ai.try_generate(sys, &messages, &prompt_clone, 140, 0.45) {
+            Some((text, engine)) => (Some(text), engine),
+            None => (None, "Offline Intent Engine".to_string()),
+        }
+    })
+    .await
+    .map_err(|e| format!("AI chat task error: {e}"))?;
 
     Ok(AiChatResponse {
         reply: llm_reply.unwrap_or_else(|| local_help_reply(&prompt)),
@@ -1872,5 +2836,116 @@ mod tests {
         assert!(cfg.t_shape);
         assert!(cfg.dynamic_spread);
         assert_eq!(hotkey.as_deref(), Some("Mouse5"));
+    }
+
+    #[test]
+    fn creates_new_named_preset_even_when_target_slot_id_is_present() {
+        let mut state = LuairState::default();
+        assert_eq!(state.profiles.len(), 4);
+
+        let (summary, hk) = apply_preset_or_crosshair_to_state(
+            &mut state,
+            "Make a new preset called Sniper with a crimson dot and thin border on key 5",
+            None,
+            Some("slot-1"),
+        )
+        .expect("create Sniper preset");
+
+        assert_eq!(state.profiles.len(), 5);
+        let created = &state.profiles[4];
+        assert_eq!(created.name, "Sniper");
+        assert_eq!(created.hotkey.as_deref(), Some("5"));
+        assert_eq!(hk.as_deref(), Some("5"));
+        assert_eq!(created.config.color, "#f43f5e");
+        assert!(created.config.dot);
+        assert!(created.config.hide_bars);
+        assert!(created.config.outline);
+        assert_eq!(state.active_profile_id.as_deref(), Some(created.id.as_str()));
+        assert_eq!(state.profiles[0].name, "Primary (Rifle)");
+        assert!(summary.contains("Sniper"));
+    }
+
+    #[test]
+    fn puts_crosshair_onto_existing_preset_by_index_and_name() {
+        let mut state = LuairState::default();
+
+        let (summary1, _) = apply_preset_or_crosshair_to_state(
+            &mut state,
+            "Put a cyan T-shape crosshair on preset 2",
+            None,
+            None,
+        )
+        .expect("put crosshair on preset 2");
+        assert_eq!(state.profiles[1].config.color, "#22d3ee");
+        assert!(state.profiles[1].config.t_shape);
+        assert!(!state.profiles[1].config.hide_bars);
+        assert_eq!(state.active_profile_id.as_deref(), Some("slot-2"));
+        assert!(summary1.contains("#2"));
+
+        let (summary2, _) = apply_preset_or_crosshair_to_state(
+            &mut state,
+            "Put a gold circle crosshair on Primary",
+            None,
+            None,
+        )
+        .expect("put crosshair on Primary");
+        assert_eq!(state.profiles[0].config.color, "#f59e0b");
+        assert!(state.profiles[0].config.has_circle);
+        assert_eq!(state.active_profile_id.as_deref(), Some("slot-1"));
+        assert!(summary2.contains("Primary"));
+    }
+
+    #[test]
+    fn saves_current_crosshair_and_supports_switch_rename_delete() {
+        let mut state = LuairState::default();
+        state.crosshair.color = "#ec4899".to_string();
+        state.crosshair.length = 18;
+
+        apply_preset_or_crosshair_to_state(
+            &mut state,
+            "Save my current crosshair as a new preset called Ranked",
+            None,
+            None,
+        )
+        .expect("save current crosshair");
+        assert_eq!(state.profiles.len(), 5);
+        assert_eq!(state.profiles[4].name, "Ranked");
+        assert_eq!(state.profiles[4].config.color, "#ec4899");
+        assert_eq!(state.profiles[4].config.length, 18);
+
+        apply_preset_or_crosshair_to_state(&mut state, "Switch to preset 3", None, None)
+            .expect("switch to preset 3");
+        assert_eq!(state.active_profile_id.as_deref(), Some("slot-3"));
+
+        apply_preset_or_crosshair_to_state(&mut state, "Rename preset 2 to Sheriff", None, None)
+            .expect("rename preset 2");
+        assert_eq!(state.profiles[1].name, "Sheriff");
+
+        apply_preset_or_crosshair_to_state(&mut state, "Delete preset 5", None, None)
+            .expect("delete preset 5");
+        assert_eq!(state.profiles.len(), 4);
+    }
+
+    #[test]
+    fn creates_multi_preset_pack_and_puts_crosshairs_on_them() {
+        let mut state = LuairState::default();
+
+        let (summary, _) = apply_preset_or_crosshair_to_state(
+            &mut state,
+            "Create presets for Rifle, Pistol, and Shotgun",
+            None,
+            None,
+        )
+        .expect("create pack");
+
+        assert_eq!(state.profiles.len(), 7);
+        assert_eq!(state.profiles[4].name, "Rifle");
+        assert!(!state.profiles[4].config.hide_bars);
+        assert_eq!(state.profiles[5].name, "Pistol");
+        assert!(state.profiles[5].config.dot);
+        assert!(state.profiles[5].config.hide_bars);
+        assert_eq!(state.profiles[6].name, "Shotgun");
+        assert!(state.profiles[6].config.has_circle);
+        assert!(summary.contains("Created 3 presets"));
     }
 }

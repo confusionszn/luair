@@ -145,6 +145,10 @@ fn apply_windows_menu_icon(hwnd: *mut core::ffi::c_void) {
 
 /// Configures the menu window on Windows (taskbar/titlebar icon + hides unpainted native resize frame).
 pub fn configure_menu_window(window: &WebviewWindow) -> Result<(), String> {
+    if let Some(icon) = window.app_handle().default_window_icon().cloned() {
+        let _ = window.set_icon(icon);
+    }
+
     #[cfg(target_os = "windows")]
     {
         let win = window.clone();
@@ -156,14 +160,14 @@ pub fn configure_menu_window(window: &WebviewWindow) -> Result<(), String> {
         });
     }
 
-    #[cfg(not(target_os = "windows"))]
-    let _ = window;
-
     Ok(())
 }
 
 /// Configures the transparent, click-through, always-on-top crosshair overlay window.
 pub fn configure_overlay_window(window: &WebviewWindow) -> Result<(), String> {
+    if let Some(icon) = window.app_handle().default_window_icon().cloned() {
+        let _ = window.set_icon(icon);
+    }
     fit_to_primary_monitor(window)?;
     window.set_always_on_top(true).map_err(|e| e.to_string())?;
     window
@@ -191,6 +195,7 @@ pub fn configure_overlay_window(window: &WebviewWindow) -> Result<(), String> {
                 return;
             };
             let hwnd = hwnd_handle.0;
+            apply_windows_menu_icon(hwnd);
             unsafe {
                 let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
                 let overlay_flags = (WS_EX_NOACTIVATE
@@ -254,6 +259,7 @@ pub fn show_and_focus_menu_window(app: &AppHandle) -> Result<(), String> {
 
             #[cfg(target_os = "windows")]
             if let Ok(hwnd) = menu.hwnd() {
+                apply_windows_menu_icon(hwnd.0);
                 hide_tauri_drag_resize_borders(hwnd.0);
                 force_windows_foreground(hwnd.0);
             }

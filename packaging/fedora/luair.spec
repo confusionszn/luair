@@ -1,5 +1,5 @@
 Name:           luair
-Version:        2.0.3
+Version:        2.0.4
 Release:        1%{?dist}
 Summary:        Independent desktop crosshair overlay powered by Rust and Tauri v2
 
@@ -56,6 +56,9 @@ install -Dm0644 public/luair-icon.svg \
 %{_datadir}/icons/hicolor/scalable/apps/com.luair.overlay.svg
 
 %changelog
+* Wed Nov 25 2026 Luair Contributors <luairsupport@gmail.com> - 2.0.4-1
+- Expand AI preset & crosshair slot generation/editing/management, reinforce native window icon assignment across overlay and menu windows, and update official website
+
 * Tue Nov 24 2026 Luair Contributors <luairsupport@gmail.com> - 2.0.3-1
 - Fix Luair Candle AI download TLS/gzip support, streamline AI UI to single Luair Candle model (475 MB), update support email, and ship real screenshots
 

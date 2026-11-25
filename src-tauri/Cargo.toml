@@ -1,6 +1,6 @@
 [package]
 name = "luair"
-version = "2.0.3"
+version = "2.0.4"
 description = "Independent Desktop Crosshair Overlay"
 authors = ["Luair"]
 edition = "2021"

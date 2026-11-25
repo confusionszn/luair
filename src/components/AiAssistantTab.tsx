@@ -45,9 +45,9 @@ interface UiChatEntry {
 }
 
 const STARTER_PROMPTS = [
-  "Make a clean lime green CS2 dot with a thin border and bind it to key 2",
+  "Create a new preset called Sniper with a crimson dot on key 5",
+  "Put a cyan T-shape crosshair on preset 2",
   "Make a neon purple liquid glass theme",
-  "How does Luair's OBS Shield keep crosshairs hidden from Discord?",
   "Enable OBS Shield",
 ];
 
@@ -70,7 +70,7 @@ export function AiAssistantTab({
       id: "welcome-ai",
       role: "assistant",
       content:
-        "Welcome to Luair AI Assistant! Download Luair Candle (475 MB) with one click for 100% private local chat — zero API keys required — or start generating crosshairs and themes right away.",
+        "Welcome to Luair AI Assistant! Download Luair Candle (475 MB) with one click for 100% private local chat — or ask me right now to create presets, put crosshairs on slots, design themes, or toggle OBS Shield.",
       engineUsed: "Local AI Hub",
     },
   ]);
