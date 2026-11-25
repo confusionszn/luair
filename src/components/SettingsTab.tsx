@@ -1,9 +1,13 @@
+import { useState } from "react";
 import {
+  Check,
+  Copy,
   Database,
   DownloadCloud,
   Globe,
   Keyboard,
   LogOut,
+  Mail,
   Monitor,
   RefreshCw,
   Sparkles,
@@ -46,6 +50,14 @@ export function SettingsTab({
   onCheckUpdates,
   onOpenUpdateModal,
 }: SettingsTabProps) {
+  const [emailCopied, setEmailCopied] = useState(false);
+
+  const handleCopySupportEmail = () => {
+    void navigator.clipboard?.writeText("luairsupport@gmail.com");
+    setEmailCopied(true);
+    window.setTimeout(() => setEmailCopied(false), 1800);
+  };
+
   const statusBadge = (() => {
     if (checkingUpdate) {
       return {
@@ -168,7 +180,7 @@ export function SettingsTab({
               <div className="text-xs font-bold">
                 Current Version:{" "}
                 <span className="font-mono text-[var(--accent)]">
-                  v{platformInfo?.appVersion ?? updateInfo?.currentVersion ?? "2.0.2"}
+                  v{platformInfo?.appVersion ?? updateInfo?.currentVersion ?? "2.0.3"}
                 </span>
               </div>
               <div className="mt-0.5 text-[10px] text-[var(--muted-text)]">
@@ -348,6 +360,59 @@ export function SettingsTab({
               {target}
             </span>
           ))}
+        </div>
+      </PanelCard>
+
+      {/* Official Support & Contact */}
+      <PanelCard surfaceMode={surfaceMode} className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-[11px] font-bold tracking-wider text-[var(--accent)] uppercase">
+            <Mail className="h-3.5 w-3.5" />
+            Support & Contact
+          </h2>
+          <a
+            href="https://github.com/confusionszn/luair"
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] font-semibold text-[var(--accent)] hover:underline"
+          >
+            github.com/confusionszn/luair
+          </a>
+        </div>
+
+        <div
+          style={{
+            backgroundColor: "var(--surface-input)",
+            borderColor: "var(--border-subtle)",
+          }}
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3.5"
+        >
+          <div>
+            <div className="text-xs font-bold">Official Luair Support Email</div>
+            <a
+              href="mailto:luairsupport@gmail.com"
+              className="mt-0.5 inline-block font-mono text-[11px] font-semibold text-[var(--accent)] hover:underline"
+            >
+              luairsupport@gmail.com
+            </a>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCopySupportEmail}
+            style={{
+              backgroundColor: "var(--surface-subtle)",
+              borderColor: "var(--border-subtle)",
+            }}
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition hover:border-[var(--accent)]"
+          >
+            {emailCopied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" />
+            ) : (
+              <Copy className="h-3.5 w-3.5 text-[var(--accent)]" />
+            )}
+            {emailCopied ? "Copied!" : "Copy Email"}
+          </button>
         </div>
       </PanelCard>
     </div>

@@ -7,5 +7,5 @@ filenames referenced by [`README.md`](../../README.md):
 | --- | --- |
 | `crosshair-studio.png` | **Crosshair Studio** tab with live preview canvas and sliders |
 | `theme-studio.png` | **Theme Studio** tab showing a Liquid Glass theme preset |
-| `ai-assistant.png` | **Luair AI** tab with Candle GGUF model status & chat |
+| `ai-assistant.png` | **Luair AI** tab showing the **Luair Candle** model hub & chat |
 | `obs-shield.png` | **OBS Shield** tab showing active capture cloak verification |

@@ -70,7 +70,7 @@ export function AiAssistantTab({
       id: "welcome-ai",
       role: "assistant",
       content:
-        "Welcome to Luair AI Assistant! Download and load a local GGUF model (SmolLM2-360M or Qwen2.5-0.5B) with one click — zero API keys required — or start asking questions and generating crosshairs/themes right away.",
+        "Welcome to Luair AI Assistant! Download Luair Candle (475 MB) with one click for 100% private local chat — zero API keys required — or start generating crosshairs and themes right away.",
       engineUsed: "Local AI Hub",
     },
   ]);
@@ -115,7 +115,7 @@ export function AiAssistantTab({
       downloadedBytes: 0,
       totalBytes: null,
       percent: 0,
-      message: "Connecting to HuggingFace...",
+      message: "Connecting to Luair Candle download...",
     });
     try {
       const next = await downloadAiModel(modelId);
@@ -158,21 +158,22 @@ export function AiAssistantTab({
     const promptText = (overridePrompt ?? input).trim();
     if (!promptText || sending) return;
 
+    const history: ChatMessage[] = messages
+      .filter((m) => m.id !== "welcome-ai")
+      .slice(-6)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     const userMsg: UiChatEntry = {
       id: `u-${Date.now()}`,
       role: "user",
       content: promptText,
     };
-    const nextMessages = [...messages, userMsg];
-    setMessages(nextMessages);
+    setMessages((prev) => [...prev, userMsg]);
     if (!overridePrompt) setInput("");
     setSending(true);
     setError(null);
 
     try {
-      const history: ChatMessage[] = nextMessages
-        .slice(-8)
-        .map((m) => ({ role: m.role, content: m.content }));
       const resp = await aiChat(history, promptText);
       if (resp.updatedState) {
         onStateApplied(resp.updatedState);
@@ -196,13 +197,13 @@ export function AiAssistantTab({
 
   return (
     <div className="space-y-4">
-      {/* Local Candle GGUF Model Hub */}
+      {/* Luair Candle Local AI Engine */}
       <PanelCard surfaceMode={surfaceMode} className="space-y-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-[var(--accent)] uppercase">
               <Cpu className="h-3.5 w-3.5" />
-              Embedded Local AI Engine (Candle GGUF · No API Keys)
+              Luair Candle · Embedded Local AI (No API Keys)
             </h2>
             <p className="mt-0.5 text-[10px] text-[var(--muted-text)]">
               Active backend:{" "}
@@ -213,141 +214,139 @@ export function AiAssistantTab({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {(status?.models ?? []).map((model) => {
-            const isDownloading =
-              progress?.modelId === model.id ||
-              status?.downloadingModelId === model.id;
-            const isLoadingThis = loadingModelId === model.id;
+        {(status?.models ?? []).slice(0, 1).map((model) => {
+          const isDownloading =
+            progress?.modelId === model.id ||
+            status?.downloadingModelId === model.id;
+          const isLoadingThis = loadingModelId === model.id;
 
-            return (
-              <div
-                key={model.id}
-                style={{
-                  backgroundColor: "var(--surface-input)",
-                  borderColor: model.loaded ? "var(--accent)" : "var(--border-subtle)",
-                }}
-                className="flex flex-col justify-between gap-3 rounded-xl border p-3.5"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-bold">{model.name}</span>
-                    <span
-                      style={{
-                        backgroundColor: model.loaded
-                          ? "rgba(var(--accent-rgb), 0.16)"
-                          : "var(--surface-subtle)",
-                      }}
-                      className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-bold uppercase ${
-                        model.loaded
-                          ? "text-[var(--accent)]"
-                          : "text-[var(--muted-text)]"
-                      }`}
-                    >
-                      {model.quantization} · ~{model.approxSizeMb} MB
+          return (
+            <div
+              key={model.id}
+              style={{
+                backgroundColor: "var(--surface-input)",
+                borderColor: model.loaded ? "var(--accent)" : "var(--border-subtle)",
+              }}
+              className="flex flex-col justify-between gap-3 rounded-xl border p-4"
+            >
+              <div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-bold">{model.name}</span>
+                  <span
+                    style={{
+                      backgroundColor: model.loaded
+                        ? "rgba(var(--accent-rgb), 0.16)"
+                        : "var(--surface-subtle)",
+                    }}
+                    className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase ${
+                      model.loaded
+                        ? "text-[var(--accent)]"
+                        : "text-[var(--muted-text)]"
+                    }`}
+                  >
+                    {model.quantization} · {model.approxSizeMb} MB
+                  </span>
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted-text)]">
+                  {model.description}
+                </p>
+              </div>
+
+              {isDownloading && progress ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-semibold text-[var(--accent)]">
+                      {progress.message}
+                    </span>
+                    <span className="font-mono">
+                      {formatBytes(progress.downloadedBytes)}
+                      {progress.totalBytes
+                        ? ` / ${formatBytes(progress.totalBytes)}`
+                        : ""}{" "}
+                      ({progress.percent.toFixed(0)}%)
                     </span>
                   </div>
-                  <p className="mt-1 text-[10px] leading-relaxed text-[var(--muted-text)]">
-                    {model.description}
-                  </p>
-                </div>
-
-                {isDownloading && progress ? (
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-semibold text-[var(--accent)]">
-                        {progress.message}
-                      </span>
-                      <span className="font-mono">
-                        {formatBytes(progress.downloadedBytes)}
-                        {progress.totalBytes
-                          ? ` / ${formatBytes(progress.totalBytes)}`
-                          : ""}{" "}
-                        ({progress.percent.toFixed(0)}%)
-                      </span>
-                    </div>
+                  <div
+                    className="h-1.5 w-full overflow-hidden rounded-full"
+                    style={{ backgroundColor: "var(--border-subtle)" }}
+                  >
                     <div
-                      className="h-1.5 w-full overflow-hidden rounded-full"
-                      style={{ backgroundColor: "var(--border-subtle)" }}
-                    >
-                      <div
-                        className="h-full rounded-full bg-[var(--accent)] transition-all duration-150"
-                        style={{ width: `${Math.max(4, progress.percent)}%` }}
-                      />
-                    </div>
+                      className="h-full rounded-full bg-[var(--accent)] transition-all duration-150"
+                      style={{ width: `${Math.max(4, progress.percent)}%` }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void cancelAiDownload()}
+                    className="flex items-center gap-1 text-[10px] font-semibold text-rose-400 hover:underline"
+                  >
+                    <X className="h-3 w-3" />
+                    Cancel Download
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  {!model.downloaded ? (
                     <button
                       type="button"
-                      onClick={() => void cancelAiDownload()}
-                      className="flex items-center gap-1 text-[10px] font-semibold text-rose-400 hover:underline"
+                      disabled={Boolean(status?.downloadingModelId)}
+                      onClick={() => void handleDownload(model.id)}
+                      className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3.5 py-2 text-[11px] font-bold text-[var(--accent-fg)] transition hover:opacity-90 disabled:opacity-45"
                     >
-                      <X className="h-3 w-3" />
-                      Cancel Download
+                      <Download className="h-3.5 w-3.5" />
+                      Download Luair Candle ({model.approxSizeMb} MB)
                     </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    {!model.downloaded ? (
-                      <button
-                        type="button"
-                        disabled={Boolean(status?.downloadingModelId)}
-                        onClick={() => void handleDownload(model.id)}
-                        className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition hover:opacity-90 disabled:opacity-45"
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        Download GGUF
-                      </button>
-                    ) : (
-                      <div className="flex items-center gap-1.5">
-                        {model.loaded ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleUnload()}
-                            style={{
-                              backgroundColor: "var(--surface-subtle)",
-                              borderColor: "var(--border-subtle)",
-                            }}
-                            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition hover:border-[var(--accent)]"
-                          >
-                            <Square className="h-3 w-3" />
-                            Unload
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={Boolean(loadingModelId)}
-                            onClick={() => void handleLoad(model.id)}
-                            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition hover:opacity-90 disabled:opacity-45"
-                          >
-                            {isLoadingThis ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Play className="h-3.5 w-3.5" />
-                            )}
-                            {isLoadingThis ? "Loading..." : "Load Engine"}
-                          </button>
-                        )}
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      {model.loaded ? (
                         <button
                           type="button"
-                          onClick={() => void handleDelete(model.id)}
-                          className="rounded-lg border border-rose-500/25 bg-rose-500/10 p-1.5 text-rose-400 transition hover:bg-rose-500/20"
-                          title="Delete local GGUF weights"
+                          onClick={() => void handleUnload()}
+                          style={{
+                            backgroundColor: "var(--surface-subtle)",
+                            borderColor: "var(--border-subtle)",
+                          }}
+                          className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-bold transition hover:border-[var(--accent)]"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Square className="h-3 w-3" />
+                          Unload
                         </button>
-                      </div>
-                    )}
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={Boolean(loadingModelId)}
+                          onClick={() => void handleLoad(model.id)}
+                          className="flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-3 py-1.5 text-[11px] font-bold text-[var(--accent-fg)] transition hover:opacity-90 disabled:opacity-45"
+                        >
+                          {isLoadingThis ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Play className="h-3.5 w-3.5" />
+                          )}
+                          {isLoadingThis ? "Loading..." : "Load Engine"}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(model.id)}
+                        className="rounded-lg border border-rose-500/25 bg-rose-500/10 p-1.5 text-rose-400 transition hover:bg-rose-500/20"
+                        title="Delete local Luair Candle weights"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
 
-                    {model.downloaded && (
-                      <span className="font-mono text-[10px] text-emerald-400">
-                        Ready ({formatBytes(model.localSizeBytes)})
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {model.downloaded && (
+                    <span className="font-mono text-[10px] text-emerald-400">
+                      Ready ({formatBytes(model.localSizeBytes)})
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {error && (
           <div className="rounded-xl border border-rose-500/30 bg-rose-500/15 px-3 py-2 text-[11px] font-semibold text-rose-300">

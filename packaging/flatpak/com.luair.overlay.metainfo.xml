@@ -23,6 +23,11 @@
   <launchable type="desktop-id">com.luair.overlay.desktop</launchable>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="2.0.3" date="2026-11-24">
+      <description>
+        <p>Fix Luair Candle AI model downloads and chat reliability, add official support email (luairsupport@gmail.com), and bundle real application screenshots.</p>
+      </description>
+    </release>
     <release version="2.0.2" date="2026-11-23">
       <description>
         <p>Fix Windows 10 overlay transparency, reliable F10 menu toggle, Windows ICO icon frames, and frameless launcher edge artifacts.</p>

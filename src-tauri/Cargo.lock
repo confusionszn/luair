@@ -2641,7 +2641,7 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "luair"
-version = "2.0.2"
+version = "2.0.3"
 dependencies = [
  "aes-gcm",
  "argon2",
@@ -5394,6 +5394,7 @@ checksum = "3ac5cecf619ca81f66a96482db09687c9f7465af65f4300a8c30cca05bd5a59d"
 dependencies = [
  "base64 0.23.1",
  "der",
+ "flate2",
  "log",
  "native-tls",
  "percent-encoding",

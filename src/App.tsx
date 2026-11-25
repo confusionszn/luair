@@ -7,6 +7,9 @@ import { OverlayWindow } from "./windows/OverlayWindow";
 
 function BrowserPreviewShell() {
   const [state, setState] = useState<LuairState>(DEFAULT_LUAIR_STATE);
+  const isDemo =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "demo";
 
   useEffect(() => {
     let active = true;
@@ -26,10 +29,10 @@ function BrowserPreviewShell() {
   }, []);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-zinc-950">
-      <CrosshairCanvas config={state.crosshair} />
+    <div className="relative h-screen w-screen overflow-hidden bg-[#050811]">
+      {!isDemo && <CrosshairCanvas config={state.crosshair} />}
       <div className="relative z-20 flex h-full w-full items-center justify-center p-4">
-        <div className="h-[min(680px,92vh)] w-[min(980px,94vw)] overflow-hidden rounded-2xl shadow-2xl">
+        <div className="h-[min(740px,94vh)] w-[min(1160px,95vw)] overflow-hidden rounded-2xl shadow-2xl">
           <MenuWindow />
         </div>
       </div>

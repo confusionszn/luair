@@ -1,4 +1,4 @@
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -9,9 +9,7 @@ use std::time::{Duration, Instant};
 
 use candle_core::{quantized::gguf_file, Device, Tensor};
 use candle_transformers::{
-    generation::LogitsProcessor,
-    models::{quantized_llama, quantized_qwen2},
-    utils::apply_repeat_penalty,
+    generation::LogitsProcessor, models::quantized_qwen2, utils::apply_repeat_penalty,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
@@ -24,16 +22,16 @@ use crate::{
     storage,
 };
 
+pub const DEFAULT_SUPPORT_EMAIL: &str = "luairsupport@gmail.com";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelArch {
-    Llama,
     Qwen2,
 }
 
 impl ModelArch {
     pub fn as_str(&self) -> &'static str {
         match self {
-            ModelArch::Llama => "llama",
             ModelArch::Qwen2 => "qwen2",
         }
     }
@@ -50,28 +48,33 @@ pub struct ModelSpec {
     pub description: &'static str,
 }
 
-pub const MODEL_CATALOG: &[ModelSpec] = &[
-    ModelSpec {
-        id: "smollm2-360m",
-        name: "SmolLM2-360M-Instruct",
-        arch: ModelArch::Llama,
-        quantization: "Q4_K_M",
-        approx_size_mb: 258,
-        gguf_url: "https://huggingface.co/bartowski/SmolLM2-360M-Instruct-GGUF/resolve/main/SmolLM2-360M-Instruct-Q4_K_M.gguf",
-        tokenizer_url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/resolve/main/tokenizer.json",
-        description: "Ultra-lightweight 360M Llama-family model for fast CPU chat & JSON synthesis.",
-    },
-    ModelSpec {
-        id: "qwen2.5-0.5b",
-        name: "Qwen2.5-0.5B-Instruct",
-        arch: ModelArch::Qwen2,
-        quantization: "Q4_K_M",
-        approx_size_mb: 469,
-        gguf_url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        tokenizer_url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/main/tokenizer.json",
-        description: "High-accuracy 0.5B Qwen2.5 instruction model with strong structured JSON output.",
-    },
-];
+pub const MODEL_CATALOG: &[ModelSpec] = &[ModelSpec {
+    id: "luair-candle",
+    name: "Luair Candle",
+    arch: ModelArch::Qwen2,
+    quantization: "Q4_K_M",
+    approx_size_mb: 475,
+    gguf_url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+    tokenizer_url: "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct/resolve/main/tokenizer.json",
+    description: "Embedded local Candle AI engine for private offline chat, crosshair creation, and theme design. No API keys or cloud servers required.",
+}];
+
+pub fn build_http_agent() -> ureq::Agent {
+    let tls = ureq::tls::TlsConfig::builder()
+        .provider(ureq::tls::TlsProvider::NativeTls)
+        .root_certs(ureq::tls::RootCerts::PlatformVerifier)
+        .build();
+    let config = ureq::Agent::config_builder()
+        .tls_config(tls)
+        .max_redirects(10)
+        .timeout_global(None)
+        .timeout_connect(Some(Duration::from_secs(30)))
+        .timeout_recv_response(Some(Duration::from_secs(30)))
+        .timeout_per_read(Some(Duration::from_secs(45)))
+        .user_agent("Luair/2.0.3")
+        .build();
+    config.into()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -132,33 +135,53 @@ pub struct AiApplyResult {
     pub state: LuairState,
 }
 
-enum QuantizedWeights {
-    Llama(quantized_llama::ModelWeights),
-    Qwen2(quantized_qwen2::ModelWeights),
-}
-
-impl QuantizedWeights {
-    fn clear_kv_cache(&mut self) {
-        match self {
-            QuantizedWeights::Llama(m) => m.clear_kv_cache(),
-            QuantizedWeights::Qwen2(m) => m.clear_kv_cache(),
-        }
-    }
-
-    fn forward(&mut self, x: &Tensor, index_pos: usize) -> candle_core::Result<Tensor> {
-        match self {
-            QuantizedWeights::Llama(m) => m.forward(x, index_pos),
-            QuantizedWeights::Qwen2(m) => m.forward(x, index_pos),
-        }
-    }
-}
-
 pub struct LoadedCandleModel {
     pub model_id: String,
     pub model_name: String,
-    weights: QuantizedWeights,
+    weights: quantized_qwen2::ModelWeights,
     tokenizer: Tokenizer,
     eos_tokens: Vec<u32>,
+}
+
+fn deduplicate_history<'a>(history: &'a [ChatMessage], user_prompt: &str) -> &'a [ChatMessage] {
+    let trimmed = user_prompt.trim();
+    let mut end = history.len();
+    while end > 0 {
+        let last = &history[end - 1];
+        if last.role == "user" && last.content.trim() == trimmed {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    &history[..end]
+}
+
+fn format_chatml_turn(role: &str, content: &str) -> String {
+    let norm_role = if role == "assistant" {
+        "assistant"
+    } else {
+        "user"
+    };
+    format!("<|im_start|>{norm_role}\n{content}<|im_end|>\n")
+}
+
+#[cfg(test)]
+pub fn build_chatml_prompt(
+    system_prompt: &str,
+    history: &[ChatMessage],
+    user_prompt: &str,
+) -> String {
+    let deduped = deduplicate_history(history, user_prompt);
+    let recent = &deduped[deduped.len().saturating_sub(6)..];
+    let mut formatted = format!("<|im_start|>system\n{system_prompt}<|im_end|>\n");
+    for msg in recent {
+        formatted.push_str(&format_chatml_turn(&msg.role, &msg.content));
+    }
+    formatted.push_str(&format!(
+        "<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n"
+    ));
+    formatted
 }
 
 impl LoadedCandleModel {
@@ -168,31 +191,23 @@ impl LoadedCandleModel {
 
         if !gguf_path.exists() || !tok_path.exists() {
             return Err(format!(
-                "Model '{}' is incomplete on disk. Please download it first.",
+                "{} is incomplete on disk. Please download it first.",
                 spec.name
             ));
         }
 
-        let mut file = File::open(&gguf_path).map_err(|e| format!("Failed opening GGUF: {e}"))?;
+        let mut file = File::open(&gguf_path).map_err(|e| format!("Failed opening model weights: {e}"))?;
         let content = gguf_file::Content::read(&mut file)
             .map_err(|e| format!("Failed parsing GGUF header: {e}"))?;
 
         let device = Device::Cpu;
         let weights = match spec.arch {
-            ModelArch::Llama => {
-                let m = quantized_llama::ModelWeights::from_gguf(content, &mut file, &device)
-                    .map_err(|e| format!("Failed loading Llama GGUF weights: {e}"))?;
-                QuantizedWeights::Llama(m)
-            }
-            ModelArch::Qwen2 => {
-                let m = quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device)
-                    .map_err(|e| format!("Failed loading Qwen2 GGUF weights: {e}"))?;
-                QuantizedWeights::Qwen2(m)
-            }
+            ModelArch::Qwen2 => quantized_qwen2::ModelWeights::from_gguf(content, &mut file, &device)
+                .map_err(|e| format!("Failed loading {} weights: {e}", spec.name))?,
         };
 
         let tokenizer = Tokenizer::from_file(&tok_path)
-            .map_err(|e| format!("Failed loading tokenizer.json: {e}"))?;
+            .map_err(|e| format!("Failed loading tokenizer: {e}"))?;
 
         let mut eos_tokens = Vec::new();
         for tok in ["<|im_end|>", "<|endoftext|>", "</s>", "<|eot_id|>"] {
@@ -220,21 +235,45 @@ impl LoadedCandleModel {
         max_tokens: usize,
         temperature: f64,
     ) -> Result<String, String> {
-        let mut formatted = format!("<|im_start|>system\n{system_prompt}<|im_end|>\n");
-        let recent = if history.len() > 6 {
-            &history[history.len() - 6..]
-        } else {
-            history
-        };
-        for msg in recent {
-            let role = if msg.role == "assistant" {
-                "assistant"
-            } else {
-                "user"
-            };
-            formatted.push_str(&format!("<|im_start|>{role}\n{}<|im_end|>\n", msg.content));
+        const MAX_PROMPT_TOKENS: usize = 1400;
+
+        let deduped = deduplicate_history(history, user_prompt);
+        let recent = &deduped[deduped.len().saturating_sub(6)..];
+
+        let head = format!("<|im_start|>system\n{system_prompt}<|im_end|>\n");
+        let tail = format!("<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n");
+
+        let base_prompt = format!("{head}{tail}");
+        let base_count = self
+            .tokenizer
+            .encode(base_prompt.as_str(), true)
+            .map_err(|e| format!("Tokenization error: {e}"))?
+            .get_ids()
+            .len();
+
+        let mut selected_turns: Vec<String> = Vec::new();
+        let mut running_tokens = base_count;
+        for msg in recent.iter().rev() {
+            let turn = format_chatml_turn(&msg.role, &msg.content);
+            let turn_tokens = self
+                .tokenizer
+                .encode(turn.as_str(), true)
+                .map_err(|e| format!("Tokenization error: {e}"))?
+                .get_ids()
+                .len();
+            if running_tokens + turn_tokens > MAX_PROMPT_TOKENS {
+                break;
+            }
+            running_tokens += turn_tokens;
+            selected_turns.push(turn);
         }
-        formatted.push_str(&format!("<|im_start|>user\n{user_prompt}<|im_end|>\n<|im_start|>assistant\n"));
+        selected_turns.reverse();
+
+        let mut formatted = head;
+        for turn in selected_turns {
+            formatted.push_str(&turn);
+        }
+        formatted.push_str(&tail);
 
         let encoding = self
             .tokenizer
@@ -244,8 +283,8 @@ impl LoadedCandleModel {
         if prompt_tokens.is_empty() {
             return Err("Empty prompt tokens".to_string());
         }
-        if prompt_tokens.len() > 1400 {
-            prompt_tokens = prompt_tokens[prompt_tokens.len() - 1400..].to_vec();
+        if prompt_tokens.len() > MAX_PROMPT_TOKENS {
+            prompt_tokens = prompt_tokens[prompt_tokens.len() - MAX_PROMPT_TOKENS..].to_vec();
         }
 
         self.weights.clear_kv_cache();
@@ -267,7 +306,8 @@ impl LoadedCandleModel {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.subsec_nanos() as u64 ^ 0x5A17_9C21)
             .unwrap_or(42);
-        let mut logits_proc = LogitsProcessor::new(seed, Some(temperature), Some(0.9));
+        let safe_temp = temperature.clamp(0.05, 1.5);
+        let mut logits_proc = LogitsProcessor::new(seed, Some(safe_temp), Some(0.9));
 
         let mut generated: Vec<u32> = Vec::new();
         let mut next_token = logits_proc
@@ -306,7 +346,11 @@ impl LoadedCandleModel {
             .tokenizer
             .decode(&generated, true)
             .map_err(|e| format!("Decode UTF-8 error: {e}"))?;
-        Ok(decoded.trim().to_string())
+        let cleaned = decoded
+            .replace("<|im_end|>", "")
+            .replace("<|im_start|>", "")
+            .replace("<|endoftext|>", "");
+        Ok(cleaned.trim().to_string())
     }
 }
 
@@ -315,6 +359,7 @@ pub struct AiManager {
     loaded_model: Mutex<Option<LoadedCandleModel>>,
     downloading_id: Mutex<Option<String>>,
     cancel_download: Arc<AtomicBool>,
+    manual_unload: AtomicBool,
 }
 
 impl AiManager {
@@ -324,11 +369,40 @@ impl AiManager {
             loaded_model: Mutex::new(None),
             downloading_id: Mutex::new(None),
             cancel_download: Arc::new(AtomicBool::new(false)),
+            manual_unload: AtomicBool::new(false),
         }
     }
 
     pub fn model_dir(&self, model_id: &str) -> PathBuf {
         self.models_dir.join(model_id)
+    }
+
+    pub fn ensure_loaded_if_available(&self) {
+        if self.manual_unload.load(Ordering::Relaxed) {
+            return;
+        }
+        let Ok(mut guard) = self.loaded_model.lock() else {
+            return;
+        };
+        if guard.is_some() {
+            return;
+        }
+        let Some(spec) = MODEL_CATALOG.first() else {
+            return;
+        };
+        let dir = self.model_dir(spec.id);
+        let gguf_path = dir.join("model.gguf");
+        let tok_path = dir.join("tokenizer.json");
+        if gguf_path.exists() && tok_path.exists() {
+            match LoadedCandleModel::load_from_dir(spec, &dir) {
+                Ok(loaded) => {
+                    *guard = Some(loaded);
+                }
+                Err(err) => {
+                    eprintln!("Luair Candle auto-load error: {err}");
+                }
+            }
+        }
     }
 
     pub fn status(&self) -> AiEngineStatus {
@@ -348,14 +422,15 @@ impl AiManager {
             .ok()
             .and_then(|g| g.clone());
 
-        let models = MODEL_CATALOG
+        let models: Vec<AiModelInfo> = MODEL_CATALOG
             .iter()
             .map(|spec| {
                 let dir = self.model_dir(spec.id);
                 let gguf_path = dir.join("model.gguf");
                 let tok_path = dir.join("tokenizer.json");
                 let downloaded = gguf_path.exists() && tok_path.exists();
-                let local_size_bytes = fs::metadata(&gguf_path).map(|m| m.len()).unwrap_or(0);
+                let local_size_bytes = fs::metadata(&gguf_path).map(|m| m.len()).unwrap_or(0)
+                    + fs::metadata(&tok_path).map(|m| m.len()).unwrap_or(0);
                 AiModelInfo {
                     id: spec.id.to_string(),
                     name: spec.name.to_string(),
@@ -370,9 +445,13 @@ impl AiManager {
             })
             .collect();
 
+        let primary_downloaded = models.first().is_some_and(|m| m.downloaded);
         let active_backend = match loaded_name {
-            Some(name) => format!("Candle GGUF (CPU · {name})"),
-            None => "Offline Intent Engine (Ready · Load a GGUF model for full LLM)".to_string(),
+            Some(name) => format!("{name} (Local CPU · Active)"),
+            None if primary_downloaded => {
+                "Luair Candle (Downloaded · Click Load or Chat)".to_string()
+            }
+            None => "Offline Intent Engine (Download Luair Candle for full AI chat)".to_string(),
         };
 
         AiEngineStatus {
@@ -391,12 +470,17 @@ impl AiManager {
         max_tokens: usize,
         temperature: f64,
     ) -> Option<(String, String)> {
+        self.ensure_loaded_if_available();
         let mut guard = self.loaded_model.lock().ok()?;
         let model = guard.as_mut()?;
-        let model_label = format!("Candle GGUF ({})", model.model_name);
+        let model_label = model.model_name.clone();
         match model.generate(system_prompt, history, user_prompt, max_tokens, temperature) {
             Ok(text) if !text.is_empty() => Some((text, model_label)),
-            _ => None,
+            Ok(_) => None,
+            Err(err) => {
+                eprintln!("Luair Candle generation error: {err}");
+                None
+            }
         }
     }
 }
@@ -408,88 +492,340 @@ fn find_model_spec(model_id: &str) -> Result<&'static ModelSpec, String> {
         .ok_or_else(|| format!("Unknown model id '{model_id}'"))
 }
 
-fn download_file_streaming(
-    app: &AppHandle,
+struct DownloadSlotGuard(Arc<AiManager>);
+
+impl Drop for DownloadSlotGuard {
+    fn drop(&mut self) {
+        if let Ok(mut dl) = self.0.downloading_id.lock() {
+            *dl = None;
+        }
+    }
+}
+
+fn emit_progress(app: Option<&AppHandle>, progress: AiDownloadProgress) {
+    if let Some(handle) = app {
+        let _ = handle.emit("luair://ai-download-progress", progress);
+    }
+}
+
+const MAX_DOWNLOAD_ATTEMPTS: usize = 8;
+
+pub fn parse_content_range(header: &str) -> Option<(u64, Option<u64>)> {
+    let trimmed = header.trim();
+    if trimmed.len() < 6 || !trimmed[..6].eq_ignore_ascii_case("bytes ") {
+        return None;
+    }
+    let rest = trimmed[6..].trim();
+    let (range_part, total_part) = rest.split_once('/')?;
+    let (start_str, end_str) = range_part.split_once('-')?;
+    let start = start_str.trim().parse::<u64>().ok()?;
+    let end = end_str.trim().parse::<u64>().ok()?;
+    if end < start {
+        return None;
+    }
+    let total = match total_part.trim() {
+        "*" => None,
+        s => Some(s.parse::<u64>().ok()?),
+    };
+    Some((start, total))
+}
+
+fn sleep_with_cancel(cancel_flag: &AtomicBool, total: Duration) -> bool {
+    let step = Duration::from_millis(250);
+    let mut elapsed = Duration::ZERO;
+    while elapsed < total {
+        if cancel_flag.load(Ordering::Relaxed) {
+            return false;
+        }
+        let chunk = (total - elapsed).min(step);
+        std::thread::sleep(chunk);
+        elapsed += chunk;
+    }
+    !cancel_flag.load(Ordering::Relaxed)
+}
+
+pub fn download_file_to_path(
+    app: Option<&AppHandle>,
     agent: &ureq::Agent,
     url: &str,
     dest: &Path,
     model_id: &str,
     stage: &str,
+    stage_label: &str,
+    allow_range: bool,
     cancel_flag: &AtomicBool,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        fs::create_dir_all(parent).map_err(|e| format!("Failed creating model folder: {e}"))?;
     }
     let part_path = dest.with_extension("part");
-    let mut resp = agent
-        .get(url)
-        .call()
-        .map_err(|e| format!("HTTP download failed ({stage}): {e}"))?;
 
-    let total_bytes = resp.body().content_length();
-    let mut reader = resp.body_mut().as_reader();
-    let mut out = File::create(&part_path).map_err(|e| e.to_string())?;
-    let mut buf = [0u8; 64 * 1024];
-    let mut downloaded_bytes: u64 = 0;
-    let mut last_emit = Instant::now() - Duration::from_millis(250);
+    emit_progress(
+        app,
+        AiDownloadProgress {
+            model_id: model_id.to_string(),
+            stage: stage.to_string(),
+            downloaded_bytes: 0,
+            total_bytes: None,
+            percent: 0.0,
+            message: stage_label.to_string(),
+        },
+    );
 
-    loop {
+    let mut last_err = String::new();
+    for attempt in 1..=MAX_DOWNLOAD_ATTEMPTS {
         if cancel_flag.load(Ordering::Relaxed) {
-            drop(out);
             let _ = fs::remove_file(&part_path);
             return Err("Download canceled by user.".to_string());
         }
 
-        let n = reader
-            .read(&mut buf)
-            .map_err(|e| format!("Stream read error: {e}"))?;
-        if n == 0 {
-            break;
+        if !allow_range && part_path.exists() {
+            let _ = fs::remove_file(&part_path);
         }
-        out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
-        downloaded_bytes += n as u64;
 
-        let now = Instant::now();
-        if now.duration_since(last_emit) >= Duration::from_millis(120) {
-            last_emit = now;
-            let percent = total_bytes
-                .filter(|&t| t > 0)
-                .map(|t| ((downloaded_bytes as f64 / t as f64) * 100.0).min(100.0) as f32)
-                .unwrap_or(0.0);
-            let _ = app.emit(
-                "luair://ai-download-progress",
-                AiDownloadProgress {
-                    model_id: model_id.to_string(),
-                    stage: stage.to_string(),
-                    downloaded_bytes,
-                    total_bytes,
-                    percent,
-                    message: format!("Downloading {stage}..."),
-                },
-            );
+        let existing_len = if allow_range {
+            fs::metadata(&part_path).map(|m| m.len()).unwrap_or(0)
+        } else {
+            0
+        };
+
+        let call_res = if existing_len > 0 {
+            agent
+                .get(url)
+                .header("Range", &format!("bytes={existing_len}-"))
+                .call()
+        } else {
+            agent.get(url).call()
+        };
+
+        let mut resp = match call_res {
+            Ok(r) => r,
+            Err(ureq::Error::StatusCode(416)) if allow_range && existing_len > 0 => {
+                let _ = fs::remove_file(&part_path);
+                last_err = format!("Range mismatch for {stage}; restarting from byte 0.");
+                continue;
+            }
+            Err(e) => {
+                last_err = format!("Network request failed ({stage}): {e}");
+                if attempt < MAX_DOWNLOAD_ATTEMPTS {
+                    emit_progress(
+                        app,
+                        AiDownloadProgress {
+                            model_id: model_id.to_string(),
+                            stage: stage.to_string(),
+                            downloaded_bytes: existing_len,
+                            total_bytes: None,
+                            percent: 0.0,
+                            message: "Reconnecting to resume download...".to_string(),
+                        },
+                    );
+                    let wait = Duration::from_secs((attempt as u64).min(5));
+                    if !sleep_with_cancel(cancel_flag, wait) {
+                        let _ = fs::remove_file(&part_path);
+                        return Err("Download canceled by user.".to_string());
+                    }
+                    continue;
+                }
+                if !allow_range {
+                    let _ = fs::remove_file(&part_path);
+                }
+                return Err(last_err);
+            }
+        };
+
+        let status = resp.status().as_u16();
+        let body_len = resp.body().content_length();
+        let content_range = resp
+            .headers()
+            .get("content-range")
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_content_range);
+
+        let resuming = allow_range
+            && existing_len > 0
+            && status == 206
+            && content_range.is_some_and(|(start, _)| start == existing_len);
+
+        let (mut out, mut downloaded_bytes, total_bytes) = if resuming {
+            let total = content_range
+                .and_then(|(_, tot)| tot)
+                .or_else(|| body_len.map(|rem| existing_len + rem));
+            let file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&part_path)
+                .map_err(|e| format!("Failed opening temp file for resume: {e}"))?;
+            (file, existing_len, total)
+        } else {
+            let file =
+                File::create(&part_path).map_err(|e| format!("Failed creating temp file: {e}"))?;
+            (file, 0u64, body_len)
+        };
+
+        let mut reader = resp.body_mut().as_reader();
+        let mut buf = [0u8; 64 * 1024];
+        let mut last_emit = Instant::now() - Duration::from_millis(250);
+        let mut stream_err: Option<String> = None;
+
+        loop {
+            if cancel_flag.load(Ordering::Relaxed) {
+                let _ = out.flush();
+                drop(out);
+                let _ = fs::remove_file(&part_path);
+                return Err("Download canceled by user.".to_string());
+            }
+
+            let n = match reader.read(&mut buf) {
+                Ok(count) => count,
+                Err(e) => {
+                    stream_err = Some(format!("Download interrupted ({stage}): {e}"));
+                    break;
+                }
+            };
+            if n == 0 {
+                break;
+            }
+            if let Err(e) = out.write_all(&buf[..n]) {
+                drop(out);
+                let _ = fs::remove_file(&part_path);
+                return Err(format!("Failed writing {stage} file: {e}"));
+            }
+            downloaded_bytes += n as u64;
+
+            let now = Instant::now();
+            if now.duration_since(last_emit) >= Duration::from_millis(120) {
+                last_emit = now;
+                let percent = total_bytes
+                    .filter(|&t| t > 0)
+                    .map(|t| ((downloaded_bytes as f64 / t as f64) * 100.0).min(99.0) as f32)
+                    .unwrap_or(5.0);
+                emit_progress(
+                    app,
+                    AiDownloadProgress {
+                        model_id: model_id.to_string(),
+                        stage: stage.to_string(),
+                        downloaded_bytes,
+                        total_bytes,
+                        percent,
+                        message: stage_label.to_string(),
+                    },
+                );
+            }
         }
+
+        if let Err(e) = out.flush() {
+            drop(out);
+            if !allow_range {
+                let _ = fs::remove_file(&part_path);
+            }
+            return Err(format!("Failed flushing {stage} file: {e}"));
+        }
+        drop(out);
+
+        if let Some(err_msg) = stream_err {
+            last_err = err_msg;
+            if !allow_range {
+                let _ = fs::remove_file(&part_path);
+            }
+            if attempt < MAX_DOWNLOAD_ATTEMPTS {
+                emit_progress(
+                    app,
+                    AiDownloadProgress {
+                        model_id: model_id.to_string(),
+                        stage: stage.to_string(),
+                        downloaded_bytes,
+                        total_bytes,
+                        percent: total_bytes
+                            .filter(|&t| t > 0)
+                            .map(|t| ((downloaded_bytes as f64 / t as f64) * 100.0).min(99.0) as f32)
+                            .unwrap_or(0.0),
+                        message: "Reconnecting to resume download...".to_string(),
+                    },
+                );
+                let wait = Duration::from_secs((attempt as u64).min(5));
+                if !sleep_with_cancel(cancel_flag, wait) {
+                    let _ = fs::remove_file(&part_path);
+                    return Err("Download canceled by user.".to_string());
+                }
+                continue;
+            }
+            return Err(last_err);
+        }
+
+        if downloaded_bytes == 0 {
+            let _ = fs::remove_file(&part_path);
+            last_err = format!("Downloaded empty {stage} file.");
+            if attempt < MAX_DOWNLOAD_ATTEMPTS {
+                let wait = Duration::from_secs((attempt as u64).min(5));
+                if !sleep_with_cancel(cancel_flag, wait) {
+                    let _ = fs::remove_file(&part_path);
+                    return Err("Download canceled by user.".to_string());
+                }
+                continue;
+            }
+            return Err(last_err);
+        }
+
+        if let Some(expected) = total_bytes.filter(|&t| t > 0) {
+            if downloaded_bytes < expected {
+                last_err = format!(
+                    "Incomplete {stage} download ({downloaded_bytes} of {expected} bytes)."
+                );
+                if attempt < MAX_DOWNLOAD_ATTEMPTS {
+                    emit_progress(
+                        app,
+                        AiDownloadProgress {
+                            model_id: model_id.to_string(),
+                            stage: stage.to_string(),
+                            downloaded_bytes,
+                            total_bytes,
+                            percent: ((downloaded_bytes as f64 / expected as f64) * 100.0)
+                                .min(99.0) as f32,
+                            message: "Reconnecting to resume download...".to_string(),
+                        },
+                    );
+                    let wait = Duration::from_secs((attempt as u64).min(5));
+                    if !sleep_with_cancel(cancel_flag, wait) {
+                        let _ = fs::remove_file(&part_path);
+                        return Err("Download canceled by user.".to_string());
+                    }
+                    continue;
+                }
+                let _ = fs::remove_file(&part_path);
+                return Err(last_err);
+            }
+            if downloaded_bytes > expected {
+                let _ = fs::remove_file(&part_path);
+                return Err(format!(
+                    "Corrupt {stage} download ({downloaded_bytes} bytes exceeded expected {expected})."
+                ));
+            }
+        }
+
+        if dest.exists() {
+            let _ = fs::remove_file(dest);
+        }
+        fs::rename(&part_path, dest).map_err(|e| {
+            let _ = fs::remove_file(&part_path);
+            format!("Failed finalizing {stage} file: {e}")
+        })?;
+
+        emit_progress(
+            app,
+            AiDownloadProgress {
+                model_id: model_id.to_string(),
+                stage: stage.to_string(),
+                downloaded_bytes,
+                total_bytes: total_bytes.or(Some(downloaded_bytes)),
+                percent: 100.0,
+                message: stage_label.to_string(),
+            },
+        );
+
+        return Ok(downloaded_bytes);
     }
 
-    out.flush().map_err(|e| e.to_string())?;
-    drop(out);
-    if dest.exists() {
-        let _ = fs::remove_file(dest);
-    }
-    fs::rename(&part_path, dest).map_err(|e| e.to_string())?;
-
-    let _ = app.emit(
-        "luair://ai-download-progress",
-        AiDownloadProgress {
-            model_id: model_id.to_string(),
-            stage: stage.to_string(),
-            downloaded_bytes,
-            total_bytes: total_bytes.or(Some(downloaded_bytes)),
-            percent: 100.0,
-            message: format!("Finished {stage}."),
-        },
-    );
-
-    Ok(())
+    Err(last_err)
 }
 
 pub fn extract_json_object(raw: &str) -> Option<serde_json::Value> {
@@ -957,10 +1293,14 @@ fn local_help_reply(prompt: &str) -> String {
         "Luair's OBS Shield uses Windows `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` (`0x11`) so the crosshair stays visible to you while hidden from OBS, Discord screenshares, and screenshots. Toggle it in the OBS Shield tab or system tray.".to_string()
     } else if lower.contains("hotkey") || lower.contains("bind") || lower.contains("mouse") || lower.contains("key") {
         "Luair uses a non-blocking pass-through input hook (`rdev`), so pressing `1`, `2`, `3`, or `Mouse4` switches crosshair slots without delaying game inputs. Click any slot's key button in Profiles to bind any key or mouse button, or set the Menu Toggle hotkey (default `F10`) in Settings.".to_string()
+    } else if lower.contains("support") || lower.contains("email") || lower.contains("contact") || lower.contains("help") {
+        format!(
+            "Need help or found a bug? Reach out anytime at {DEFAULT_SUPPORT_EMAIL} or open an issue on GitHub (https://github.com/confusionszn/luair/issues)."
+        )
     } else if lower.contains("vault") || lower.contains("account") || lower.contains("privacy") || lower.contains("offline") {
         "Everything in Luair runs 100% locally with zero API keys or cloud servers. Your local account is protected in embedded SQLite with Argon2id password hashing and AES-256-GCM encryption.".to_string()
     } else {
-        "I'm ready locally! Download and load `SmolLM2-360M` or `Qwen2.5-0.5B` above for full Candle GGUF conversational reasoning, or ask me right now to create a crosshair (e.g. \"Make a clean lime green CS2 dot with a thin border and bind it to key 2\"), design a theme, or toggle OBS Shield.".to_string()
+        "I'm ready locally! Download Luair Candle (475 MB) above for full local conversational reasoning, or ask me right now to create a crosshair (e.g. \"Make a clean lime green CS2 dot with a thin border and bind it to key 2\"), design a theme, or toggle OBS Shield.".to_string()
     }
 }
 
@@ -1049,50 +1389,71 @@ pub async fn download_ai_model(
         *dl = Some(model_id.clone());
     }
     ai.cancel_download.store(false, Ordering::Relaxed);
+    ai.manual_unload.store(false, Ordering::Relaxed);
 
-    let result = tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || {
+        let _guard = DownloadSlotGuard(ai.clone());
         let dir = ai.model_dir(spec.id);
-        let config = ureq::Agent::config_builder()
-            .timeout_global(None)
-            .timeout_connect(Some(Duration::from_secs(20)))
-            .build();
-        let agent: ureq::Agent = config.into();
+        let agent = build_http_agent();
 
-        let tok_res = download_file_streaming(
-            &app,
+        download_file_to_path(
+            Some(&app),
             &agent,
             spec.tokenizer_url,
             &dir.join("tokenizer.json"),
             spec.id,
             "tokenizer",
+            "Downloading Luair Candle tokenizer (1/2)...",
+            false,
             &ai.cancel_download,
-        );
-        if let Err(e) = tok_res {
-            if let Ok(mut dl) = ai.downloading_id.lock() {
-                *dl = None;
-            }
-            return Err(e);
-        }
+        )?;
 
-        let gguf_res = download_file_streaming(
-            &app,
+        download_file_to_path(
+            Some(&app),
             &agent,
             spec.gguf_url,
             &dir.join("model.gguf"),
             spec.id,
             "model",
+            "Downloading Luair Candle weights (2/2)...",
+            true,
             &ai.cancel_download,
+        )?;
+
+        emit_progress(
+            Some(&app),
+            AiDownloadProgress {
+                model_id: spec.id.to_string(),
+                stage: "loading".to_string(),
+                downloaded_bytes: 0,
+                total_bytes: None,
+                percent: 99.0,
+                message: "Loading Luair Candle...".to_string(),
+            },
         );
-        if let Ok(mut dl) = ai.downloading_id.lock() {
-            *dl = None;
+
+        let loaded = LoadedCandleModel::load_from_dir(spec, &dir)?;
+        {
+            let mut guard = ai.loaded_model.lock().map_err(|e| e.to_string())?;
+            *guard = Some(loaded);
         }
-        gguf_res?;
+
+        emit_progress(
+            Some(&app),
+            AiDownloadProgress {
+                model_id: spec.id.to_string(),
+                stage: "ready".to_string(),
+                downloaded_bytes: 0,
+                total_bytes: None,
+                percent: 100.0,
+                message: "Luair Candle ready.".to_string(),
+            },
+        );
+
         Ok(ai.status())
     })
     .await
-    .map_err(|e| format!("Download task error: {e}"))?;
-
-    result
+    .map_err(|e| format!("Download task error: {e}"))?
 }
 
 #[tauri::command]
@@ -1108,6 +1469,7 @@ pub async fn load_ai_model(
 ) -> Result<AiEngineStatus, String> {
     let spec = find_model_spec(&model_id)?;
     let ai = app_state.ai.clone();
+    ai.manual_unload.store(false, Ordering::Relaxed);
 
     tauri::async_runtime::spawn_blocking(move || {
         let dir = ai.model_dir(spec.id);
@@ -1124,6 +1486,7 @@ pub async fn load_ai_model(
 
 #[tauri::command]
 pub fn unload_ai_model(app_state: State<'_, AppState>) -> Result<AiEngineStatus, String> {
+    app_state.ai.manual_unload.store(true, Ordering::Relaxed);
     {
         let mut guard = app_state.ai.loaded_model.lock().map_err(|e| e.to_string())?;
         *guard = None;
@@ -1253,10 +1616,10 @@ pub async fn ai_chat(
     let prompt_clone = prompt.clone();
 
     let (llm_reply, engine_used) = tauri::async_runtime::spawn_blocking(move || {
-        let sys = "You are Luair AI, the built-in local assistant for Luair, an open-source, lightweight Rust + Tauri desktop crosshair overlay. Be concise and helpful. Mention OBS Shield (WDA_EXCLUDEFROMCAPTURE), non-blocking rdev keybinds (keyboard + mouse buttons), Liquid Glass / Solid themes, and the Crosshair Studio accurately.";
-        match ai.try_generate(sys, &messages, &prompt_clone, 220, 0.5) {
+        let sys = "You are Luair Candle, the built-in offline AI assistant inside Luair, a lightweight Rust + Tauri desktop crosshair overlay. Be concise (2-4 short sentences), accurate, and friendly. Mention OBS Shield (WDA_EXCLUDEFROMCAPTURE), non-blocking global hotkeys, Liquid Glass / Solid themes, and Crosshair Studio accurately.";
+        match ai.try_generate(sys, &messages, &prompt_clone, 140, 0.45) {
             Some((text, engine)) => (Some(text), engine),
-            None => (None, "Offline Rule Engine".to_string()),
+            None => (None, "Offline Intent Engine".to_string()),
         }
     })
     .await
@@ -1332,9 +1695,118 @@ mod tests {
     use super::*;
 
     #[test]
-    fn catalog_contains_qwen_and_smollm2_gguf_entries() {
-        assert!(MODEL_CATALOG.iter().any(|m| m.id == "smollm2-360m" && m.arch == ModelArch::Llama));
-        assert!(MODEL_CATALOG.iter().any(|m| m.id == "qwen2.5-0.5b" && m.arch == ModelArch::Qwen2));
+    fn catalog_contains_single_luair_candle_entry() {
+        assert_eq!(MODEL_CATALOG.len(), 1);
+        let entry = &MODEL_CATALOG[0];
+        assert_eq!(entry.id, "luair-candle");
+        assert_eq!(entry.name, "Luair Candle");
+        assert_eq!(entry.arch, ModelArch::Qwen2);
+        assert_eq!(entry.quantization, "Q4_K_M");
+        assert_eq!(entry.approx_size_mb, 475);
+        assert!(!entry.name.to_ascii_lowercase().contains("qwen"));
+        assert!(!entry.name.to_ascii_lowercase().contains("smollm"));
+        assert!(!entry.description.to_ascii_lowercase().contains("qwen"));
+        assert!(!entry.description.to_ascii_lowercase().contains("smollm"));
+    }
+
+    #[test]
+    fn deduplicates_trailing_user_message_in_history() {
+        let history = vec![
+            ChatMessage {
+                role: "user".to_string(),
+                content: "Earlier question".to_string(),
+            },
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: "Earlier answer".to_string(),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: "  Enable OBS Shield ".to_string(),
+            },
+        ];
+        let prompt = build_chatml_prompt("System", &history, "Enable OBS Shield");
+        assert_eq!(prompt.matches("Enable OBS Shield").count(), 1);
+        assert!(prompt.contains("Earlier question"));
+        assert!(prompt.contains("Earlier answer"));
+    }
+
+    #[test]
+    #[ignore]
+    fn live_download_load_and_chat_luair_candle() {
+        let spec = &MODEL_CATALOG[0];
+        let temp_dir = std::env::temp_dir().join("luair_candle_live_test");
+        if temp_dir.exists() {
+            let _ = fs::remove_dir_all(&temp_dir);
+        }
+        fs::create_dir_all(&temp_dir).expect("create live test temp dir");
+
+        let agent = build_http_agent();
+        let cancel = AtomicBool::new(false);
+
+        let tok_path = temp_dir.join("tokenizer.json");
+        let gguf_path = temp_dir.join("model.gguf");
+
+        let tok_bytes = download_file_to_path(
+            None,
+            &agent,
+            spec.tokenizer_url,
+            &tok_path,
+            spec.id,
+            "tokenizer",
+            "Downloading Luair Candle tokenizer (1/2)...",
+            false,
+            &cancel,
+        )
+        .expect("download tokenizer.json");
+        assert_eq!(tok_bytes, 7_031_645);
+
+        let gguf_bytes = download_file_to_path(
+            None,
+            &agent,
+            spec.gguf_url,
+            &gguf_path,
+            spec.id,
+            "model",
+            "Downloading Luair Candle weights (2/2)...",
+            true,
+            &cancel,
+        )
+        .expect("download model.gguf");
+        assert_eq!(gguf_bytes, 491_400_032);
+
+        let combined_mib = ((tok_bytes + gguf_bytes) as f64 / (1024.0 * 1024.0)).round() as u32;
+        assert_eq!(combined_mib, spec.approx_size_mb);
+
+        let mut model = LoadedCandleModel::load_from_dir(spec, &temp_dir)
+            .expect("load downloaded Luair Candle model");
+        let reply = model
+            .generate(
+                "You are Luair Candle, an offline desktop crosshair assistant. Reply concisely.",
+                &[],
+                "Say hello as Luair Candle in one short sentence.",
+                48,
+                0.3,
+            )
+            .expect("generate reply from Luair Candle");
+
+        println!("Luair Candle live reply: {reply}");
+        assert!(!reply.is_empty());
+        assert!(reply.chars().any(|c| c.is_ascii_alphabetic()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn parses_http_content_range_headers() {
+        assert_eq!(
+            parse_content_range("bytes 100-491400031/491400032"),
+            Some((100, Some(491_400_032)))
+        );
+        assert_eq!(parse_content_range("bytes 0-99/*"), Some((0, None)));
+        assert_eq!(parse_content_range("bytes 20-10/100"), None);
+        assert_eq!(parse_content_range("items 0-10/100"), None);
+        assert_eq!(parse_content_range("invalid"), None);
     }
 
     #[test]

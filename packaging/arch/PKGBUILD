@@ -1,6 +1,6 @@
-# Maintainer: Luair Contributors <maintainers@luair.app>
+# Maintainer: Luair Contributors <luairsupport@gmail.com>
 pkgname=luair
-pkgver=2.0.2
+pkgver=2.0.3
 pkgrel=1
 pkgdesc="Independent, lightweight Rust + Tauri v2 desktop crosshair overlay with dynamic themes, local AI, and stream protection"
 arch=('x86_64' 'aarch64')

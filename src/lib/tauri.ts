@@ -57,6 +57,41 @@ export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
+function isDemoPreview(): boolean {
+  return (
+    !isTauriRuntime() &&
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("preview") === "demo"
+  );
+}
+
+function createDemoPreviewState(): LuairState {
+  const base = hydrateState({});
+  const tacticalCrosshair = parseCrosshairConfig({
+    ...base.crosshair,
+    color: "#84cc16",
+    outline: true,
+    outlineThickness: 1,
+    outlineOpacity: 0.9,
+    dot: true,
+    dotSize: 3,
+    length: 10,
+    thickness: 2,
+    gap: 5,
+    hideBars: false,
+  });
+  return hydrateState({
+    ...base,
+    crosshair: tacticalCrosshair,
+    ui: {
+      ...base.ui,
+      streamproof: true,
+      cloakMenu: true,
+      hotkey: "F10",
+    },
+  });
+}
+
 export function getWindowMode(): WindowMode {
   if (typeof window === "undefined") {
     return "menu";
@@ -157,7 +192,7 @@ function writeBrowserState(state: LuairState): void {
 
 export async function getState(): Promise<LuairState> {
   if (!isTauriRuntime()) {
-    return readBrowserState();
+    return isDemoPreview() ? createDemoPreviewState() : readBrowserState();
   }
   const remote = await invoke<Partial<LuairState>>("get_state");
   return hydrateState(remote);
@@ -191,6 +226,22 @@ export async function selectProfile(profileId: string): Promise<LuairState> {
 
 export async function getAuthSession(): Promise<AuthSession> {
   if (!isTauriRuntime()) {
+    if (isDemoPreview()) {
+      return {
+        authenticated: true,
+        rememberMe: true,
+        hasExistingAccounts: true,
+        vaultEngine: "SQLite + Argon2id + AES-256-GCM",
+        account: {
+          id: "demo-preview",
+          username: "confusionszn",
+          email: "luairsupport@gmail.com",
+          createdAt: 1763800000,
+          lastLoginAt: 1763900000,
+          onboardingCompleted: true,
+        },
+      };
+    }
     return browserAuthSession(readBrowserVault());
   }
   return invoke<AuthSession>("get_auth_session");
@@ -380,6 +431,16 @@ export async function setCaptureCloak(
 
 export async function getCaptureCloakStatus(): Promise<CloakStatus> {
   if (!isTauriRuntime()) {
+    if (isDemoPreview()) {
+      return {
+        enabled: true,
+        cloakMenu: true,
+        platform: "windows",
+        mechanism: "WDA_EXCLUDEFROMCAPTURE (0x11)",
+        supported: true,
+        overlayVerified: true,
+      };
+    }
     const current = readBrowserState();
     return {
       enabled: current.ui.streamproof,
@@ -512,25 +573,13 @@ export async function onMouseCaptured(
 
 const BROWSER_AI_MOCK_MODELS = [
   {
-    id: "smollm2-360m",
-    name: "SmolLM2-360M-Instruct",
-    architecture: "llama",
-    quantization: "Q4_K_M",
-    approxSizeMb: 258,
-    description:
-      "Ultra-lightweight 360M Llama-family model for fast CPU chat & JSON synthesis.",
-    downloaded: false,
-    loaded: false,
-    localSizeBytes: 0,
-  },
-  {
-    id: "qwen2.5-0.5b",
-    name: "Qwen2.5-0.5B-Instruct",
+    id: "luair-candle",
+    name: "Luair Candle",
     architecture: "qwen2",
     quantization: "Q4_K_M",
-    approxSizeMb: 469,
+    approxSizeMb: 475,
     description:
-      "High-accuracy 0.5B Qwen2.5 instruction model with strong structured JSON output.",
+      "Embedded local Candle AI engine for private offline chat, crosshair creation, and theme design. No API keys or cloud servers required.",
     downloaded: false,
     loaded: false,
     localSizeBytes: 0,
@@ -607,11 +656,26 @@ function browserAiPreviewTheme(current: LuairState, prompt: string): AiApplyResu
 
 export async function getAiStatus(): Promise<AiEngineStatus> {
   if (!isTauriRuntime()) {
+    if (isDemoPreview()) {
+      return {
+        models: [
+          {
+            ...BROWSER_AI_MOCK_MODELS[0],
+            downloaded: true,
+            loaded: true,
+            localSizeBytes: 498431677,
+          },
+        ],
+        loadedModelId: "luair-candle",
+        downloadingModelId: null,
+        activeBackend: "Luair Candle (Local CPU · Active)",
+      };
+    }
     return {
       models: BROWSER_AI_MOCK_MODELS,
       loadedModelId: null,
       downloadingModelId: null,
-      activeBackend: "Browser Preview Fallback (Desktop runs Candle GGUF)",
+      activeBackend: "Offline Intent Engine (Desktop runs Luair Candle)",
     };
   }
   return invoke<AiEngineStatus>("get_ai_status");
@@ -692,7 +756,7 @@ export async function aiChat(
     }
     return {
       reply:
-        "Browser preview mode active. Run `pnpm.cmd tauri dev` to download and run Candle GGUF models locally in Rust.",
+        "Browser preview mode active. Run the desktop app to download and run Luair Candle locally in Rust.",
       engineUsed: "Browser Preview Fallback",
       appliedAction: null,
       updatedState: null,
@@ -716,8 +780,8 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   if (!isTauriRuntime()) {
     return {
       available: false,
-      currentVersion: "2.0.2",
-      latestVersion: "2.0.2",
+      currentVersion: "2.0.3",
+      latestVersion: "2.0.3",
       releaseNotes: null,
       releaseDate: null,
       releaseUrl: "https://github.com/confusionszn/luair/releases",
@@ -740,7 +804,7 @@ export async function downloadAndInstallUpdate(): Promise<void> {
 export async function getPlatformInfo(): Promise<PlatformBuildInfo> {
   if (!isTauriRuntime()) {
     return {
-      appVersion: "2.0.2",
+      appVersion: "2.0.3",
       os: "browser-preview",
       arch: "wasm-web",
       targetTriple: "browser-preview",

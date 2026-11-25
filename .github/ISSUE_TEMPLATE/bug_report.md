@@ -6,8 +6,8 @@ labels: bug
 ---
 
 ## Environment
-- **OS & Version**: (e.g. Windows 11 24H2, Ubuntu 24.04 X11/Wayland, macOS 15 Sequoia)
-- **Luair Version**: (e.g. v2.0.0)
+- **OS & Version**: (e.g. Windows 10/11, Ubuntu 24.04 X11/Wayland, macOS 15 Sequoia)
+- **Luair Version**: (e.g. v2.0.3)
 - **Display / Game Mode**: (Borderless Windowed / Fullscreen / Multi-Monitor DPI)
 
 ## Description
@@ -19,4 +19,4 @@ A clear description of the bug and what you expected to happen.
 3. Observe issue
 
 ## Additional Context / Logs
-Attach screenshots or terminal output if applicable.
+Attach screenshots or terminal output if applicable. For private support inquiries, email [luairsupport@gmail.com](mailto:luairsupport@gmail.com).

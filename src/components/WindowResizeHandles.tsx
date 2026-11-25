@@ -32,7 +32,7 @@ export function WindowResizeHandles({ disabled = false }: WindowResizeHandlesPro
               void startResizeDragging(h.direction);
             }
           }}
-          className={`fixed z-50 select-none ${h.className}`}
+          className={`absolute z-50 select-none ${h.className}`}
           aria-hidden="true"
         />
       ))}
@@ -42,7 +42,7 @@ export function WindowResizeHandles({ disabled = false }: WindowResizeHandlesPro
         width="12"
         height="12"
         viewBox="0 0 12 12"
-        className="pointer-events-none fixed right-1.5 bottom-1.5 z-40 opacity-35"
+        className="pointer-events-none absolute right-1.5 bottom-1.5 z-40 opacity-35"
         aria-hidden="true"
       >
         <path

@@ -36,20 +36,18 @@ Luair v2 is engineered strictly as an **independent desktop overlay** combining 
 | **Crosshair X-Class Studio** | Real-time canvas renderer supporting Gap, Length, Thickness, Center Dot (circle/square), Outline, T-Shape, Opacity, Blur, Center Offset X/Y, Solid / Gradient / Rainbow colors, live **Dynamic Firing Spread & Recoil Color**, 10 hotkey slots, and `LUAIR-CH1:` Base64/JSON sharing. |
 | **Dynamic Theme Engine** | Supports **Liquid Glass** (frosted blur, refractive highlight, specular borders) and **Solid Minimalist** surfaces, 7 built-in presets (*Cyberpunk Neon*, *Obsidian Dark*, *Arctic Frost*, *Solar Gold*, *Deep Space*, *Synthwave Sunset*, *Emerald Tactical*), color pickers, and `LUAIR1:` export/import codes. |
 | **Onboarding & Local Encrypted Vault** | Animated Welcome Screen & 3-step Setup Wizard leading into a local-only account vault powered by embedded **SQLite**, **Argon2id** password hashing, **AES-256-GCM** encrypted profiles/states, and persistent remembered sessions. |
-| **Embedded Local AI Engine** | Pure-Rust **Candle GGUF** inference (`SmolLM2-360M-Instruct` and `Qwen2.5-0.5B-Instruct`) with a one-click streaming downloader, dedicated **Luair AI** assistant tab, and `'Make with AI'` natural-language bars in Crosshair & Theme Studios. |
+| **Embedded Local AI Engine** | Pure-Rust **Luair Candle** engine (one-click `475 MB` offline download) powering a dedicated **Luair AI** assistant tab and `'Make with AI'` natural-language bars in Crosshair & Theme Studios. |
 | **In-App Auto-Updater** | Native **Tauri Updater** checking signed **GitHub Releases** (`latest.json`), presenting a release notes banner with version diff, live download progress, Minisign verification, and one-click **Update Now** restart. |
 
 ---
 
 ## Screenshots
 
-> Add captured PNGs to [`docs/screenshots/`](./docs/screenshots/README.md) to populate these preview slots in your fork.
-
 | Crosshair Studio & Live Canvas | Dynamic Liquid Glass Theme Engine |
 | :---: | :---: |
-| ![Crosshair Studio Placeholder](./docs/screenshots/crosshair-studio.png) | ![Theme Studio Placeholder](./docs/screenshots/theme-studio.png) |
-| **Embedded Candle AI Assistant** | **OBS & Discord Capture Shield** |
-| ![Luair AI Placeholder](./docs/screenshots/ai-assistant.png) | ![OBS Shield Placeholder](./docs/screenshots/obs-shield.png) |
+| ![Luair Crosshair Studio](./docs/screenshots/crosshair-studio.png) | ![Luair Theme Studio](./docs/screenshots/theme-studio.png) |
+| **Luair Candle Local AI Assistant** | **OBS & Discord Capture Shield** |
+| ![Luair AI Assistant](./docs/screenshots/ai-assistant.png) | ![Luair OBS Shield](./docs/screenshots/obs-shield.png) |
 
 ---
 
@@ -137,7 +135,8 @@ Luair/
 
 ---
 
-## Community & License
+## Support, Community & License
 
+* **Support & Contact:** Reach out anytime at [**luairsupport@gmail.com**](mailto:luairsupport@gmail.com) or open an issue on [GitHub Issues](https://github.com/confusionszn/luair/issues).
 * Contributions are welcome! Read [`CONTRIBUTING.md`](./CONTRIBUTING.md) and abide by our [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 * Released under the [MIT License](./LICENSE).

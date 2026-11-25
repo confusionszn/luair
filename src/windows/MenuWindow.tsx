@@ -145,12 +145,28 @@ function formatKeyFromEvent(e: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
+function getInitialTab(): MenuTab {
+  if (typeof window === "undefined") return "crosshair";
+  const raw = new URLSearchParams(window.location.search).get("tab");
+  if (
+    raw === "crosshair" ||
+    raw === "profiles" ||
+    raw === "shield" ||
+    raw === "theme" ||
+    raw === "ai" ||
+    raw === "settings"
+  ) {
+    return raw;
+  }
+  return "crosshair";
+}
+
 export function MenuWindow() {
   const [state, setState] = useState<LuairState>(DEFAULT_LUAIR_STATE);
   const [loaded, setLoaded] = useState(false);
   const [session, setSession] = useState<AuthSession>(DEFAULT_AUTH_SESSION);
   const [authLoaded, setAuthLoaded] = useState(false);
-  const [tab, setTab] = useState<MenuTab>("crosshair");
+  const [tab, setTab] = useState<MenuTab>(getInitialTab);
   const [cloakStatus, setCloakStatus] = useState<CloakStatus | null>(null);
   const [recording, setRecording] = useState<RecordingTarget>(null);
   const [switchedBanner, setSwitchedBanner] = useState<string | null>(null);
@@ -617,7 +633,7 @@ export function MenuWindow() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="h-screen w-screen overflow-hidden bg-transparent">
+      <div className="relative h-full w-full overflow-hidden bg-transparent">
         <WindowResizeHandles disabled={maximized} />
 
         <DynamicGlassShell theme={theme} isMaximized={maximized}>
